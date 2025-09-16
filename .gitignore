@@ -1,0 +1,10 @@
+node_modules/
+.env
+logs/
+uploads/
+build/
+dist/
+coverage/
+.idea/
+.vscode/
+*.log
