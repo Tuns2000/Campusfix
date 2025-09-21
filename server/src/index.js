@@ -39,11 +39,13 @@ app.get('/api/health', (req, res) => {
 
 // Подключаем маршруты API
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/users', authMiddleware, require('./routes/users'));
-app.use('/api/projects', authMiddleware, require('./routes/projects'));
-app.use('/api/defects', authMiddleware, require('./routes/defects'));
-app.use('/api/reports', authMiddleware, require('./routes/reports'));
-app.use('/api/attachments', authMiddleware, require('./routes/attachments'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/projects', require('./routes/projects'));
+// Маршруты для этапов проектов (вложенные в /api/projects)
+app.use('/api/projects', require('./routes/projectStages'));
+app.use('/api/defects', require('./routes/defects'));
+app.use('/api/reports', require('./routes/reports'));
+app.use('/api/attachments', require('./routes/attachments'));
 
 // Обработка ошибок
 app.use(errorHandler);
