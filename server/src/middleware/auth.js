@@ -31,7 +31,13 @@ const authMiddleware = (req, res, next) => {
     const decoded = jwt.verify(token, config.jwt.secret);
     
     // Добавляем информацию о пользователе в объект запроса
-    req.user = decoded;
+    req.user = {
+      id: decoded.id,
+      email: decoded.email,
+      role: decoded.role,
+      firstName: decoded.firstName,
+      lastName: decoded.lastName
+    };
     
     next();
   } catch (error) {
