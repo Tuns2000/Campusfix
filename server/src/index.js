@@ -30,7 +30,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Настройка статических файлов для загрузок
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(path.join(__dirname, '..', config.uploads.directory)));
 
 // Базовый маршрут для проверки работы API
 app.get('/api/health', (req, res) => {
@@ -46,8 +46,11 @@ app.use('/api/projects', require('./routes/projectStages'));
 app.use('/api/defects', require('./routes/defects'));
 // Маршруты для комментариев к дефектам
 app.use('/api/defects', require('./routes/comments'));
-app.use('/api/reports', require('./routes/reports'));
+// Маршруты для вложений
 app.use('/api/attachments', require('./routes/attachments'));
+// Маршруты для вложений в дефектах
+app.use('/api', require('./routes/attachments'));
+app.use('/api/reports', require('./routes/reports'));
 
 // Обработка ошибок
 app.use(errorHandler);

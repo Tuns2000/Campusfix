@@ -26,16 +26,26 @@ const config = {
   
   // Настройки загрузки файлов
   uploads: {
-    directory: process.env.UPLOAD_DIR || 'uploads',
-    maxSize: parseInt(process.env.MAX_FILE_SIZE || '5242880'), // 5MB
-    allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    directory: process.env.UPLOADS_DIR || 'uploads',
+    maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024, // 10MB по умолчанию
+    allowedTypes: [
+      'image/jpeg', 
+      'image/png', 
+      'image/gif', 
+      'application/pdf', 
+      'application/msword', 
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain'
+    ]
   },
   
   // Настройки логирования
   logging: {
+    file: process.env.LOG_FILE || 'logs/server.log',
     level: process.env.LOG_LEVEL || 'info',
-    file: process.env.LOG_FILE || 'logs/server.log'
-  }
+  },
 };
 
 module.exports = config;

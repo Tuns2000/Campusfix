@@ -1,10 +1,27 @@
+# Ignore uploaded files
+uploads/*
+!uploads/.gitkeep
+
+# Ignore logs
+logs/*
+!logs/.gitkeep
+
+# Node modules
 node_modules/
+
+# Environment variables
 .env
-logs/
-uploads/
+
+# Build directories
 build/
 dist/
+
+# Coverage reports
 coverage/
+
+# IDE and editor folders
 .idea/
 .vscode/
+
+# Log files
 *.log
