@@ -44,6 +44,8 @@ app.use('/api/projects', require('./routes/projects'));
 // Маршруты для этапов проектов (вложенные в /api/projects)
 app.use('/api/projects', require('./routes/projectStages'));
 app.use('/api/defects', require('./routes/defects'));
+// Маршруты для комментариев к дефектам
+app.use('/api/defects', require('./routes/comments'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/attachments', require('./routes/attachments'));
 
