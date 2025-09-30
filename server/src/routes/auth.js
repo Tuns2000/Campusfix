@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { body, validationResult } = require('express-validator');
+const { body, validationResult, check } = require('express-validator');
 const db = require('../services/db');
 const config = require('../config');
 
@@ -52,74 +52,111 @@ const loginValidation = [
  * @desc Регистрация нового пользователя
  * @access Public
  */
-router.post('/register', registerValidation, async (req, res, next) => {
+router.post('/register', [
+  // Валидация входящих данных
+  check('email').isEmail().withMessage('Введите корректный email'),
+  check('password').isLength({ min: 6 }).withMessage('Пароль должен содержать минимум 6 символов'),
+  check('first_name').notEmpty().withMessage('Имя обязательно для заполнения'),
+  check('last_name').notEmpty().withMessage('Фамилия обязательна для заполнения'),
+  check('role')
+    .isIn(['admin', 'manager', 'engineer', 'observer'])
+    .withMessage('Недопустимая роль')
+], async (req, res) => {
   try {
+    console.log('============ РЕГИСТРАЦИЯ ПОЛЬЗОВАТЕЛЯ ============');
+    console.log('Тело запроса:', req.body);
+    
     // Проверка результатов валидации
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        success: false, 
+      console.log('Ошибки валидации:', JSON.stringify(errors.array()));
+      return res.status(400).json({
+        success: false,
         message: 'Ошибка валидации данных',
-        errors: errors.array() 
+        errors: errors.array()
       });
     }
-    
-    const { email, password, firstName, lastName, role } = req.body;
-    
+
+    const { email, password, first_name, last_name, role } = req.body;
+
+    // Проверка полей явно, чтобы убедиться, что они не null/undefined
+    if (!first_name || !last_name) {
+      console.log('Обнаружены пустые поля:', { first_name, last_name });
+      return res.status(400).json({
+        success: false,
+        message: 'Имя и фамилия не могут быть пустыми'
+      });
+    }
+
     // Проверка, существует ли пользователь с таким email
-    const userExists = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-    
+    const userExists = await db.query(
+      'SELECT * FROM users WHERE email = $1',
+      [email]
+    );
+
     if (userExists.rows.length > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Пользователь с таким email уже существует' 
+      return res.status(400).json({
+        success: false,
+        message: 'Пользователь с таким email уже существует'
       });
     }
-    
+
     // Хеширование пароля
     const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-    
-    // Создание пользователя
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    console.log('Данные перед вставкой в БД:', {
+      email,
+      password: '[HIDDEN]',
+      first_name,
+      last_name,
+      role
+    });
+
+    // Создание нового пользователя
     const result = await db.query(
-      'INSERT INTO users (email, password_hash, first_name, last_name, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, first_name, last_name, role',
-      [email, passwordHash, firstName, lastName, role]
+      `INSERT INTO users (email, password_hash, first_name, last_name, role, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       RETURNING id, email, first_name, last_name, role`,
+      [email, hashedPassword, first_name, last_name, role]
     );
-    
+
     const user = result.rows[0];
-    
+    console.log('Пользователь успешно создан:', user);
+
     // Создание JWT токена
     const token = jwt.sign(
-      { 
-        id: user.id, 
-        email: user.email, 
+      {
+        id: user.id,
+        email: user.email,
         role: user.role,
         firstName: user.first_name,
-        lastName: user.last_name 
+        lastName: user.last_name
       },
       config.jwt.secret,
-      { expiresIn: config.jwt.expiresIn }
+      {
+        expiresIn: config.jwt.expiresIn
+      }
     );
-    
-    // Логирование успешной регистрации
-    console.log(`User registered: ${user.email}, role: ${user.role}, id: ${user.id}`);
-    
+
     res.status(201).json({
       success: true,
       message: 'Пользователь успешно зарегистрирован',
+      token,
       user: {
         id: user.id,
         email: user.email,
         firstName: user.first_name,
         lastName: user.last_name,
         role: user.role
-      },
-      token
+      }
     });
-    
-  } catch (err) {
-    console.error('Registration error:', err);
-    next(err);
+  } catch (error) {
+    console.log('Registration error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Ошибка сервера при регистрации пользователя'
+    });
   }
 });
 

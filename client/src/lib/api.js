@@ -1,187 +1,120 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import axios from 'axios';
 
-// Базовый URL API
-const API_URL = process.env.REACT_APP_API_URL || '/api';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-// Создаем API сервис с RTK Query
-export const api = createApi({
-  reducerPath: 'api',
-  baseQuery: fetchBaseQuery({
-    baseUrl: API_URL,
-    prepareHeaders: (headers, { getState }) => {
-      // Получаем токен из состояния
-      const token = getState().auth.token;
-      
-      // Если токен есть, добавляем его в заголовки
-      if (token) {
-        headers.set('authorization', `Bearer ${token}`);
-      }
-      
-      return headers;
-    },
-  }),
-  tagTypes: ['User', 'Project', 'Defect', 'Report', 'Attachment'],
-  endpoints: (builder) => ({
-    // Аутентификация
-    login: builder.mutation({
-      query: (credentials) => ({
-        url: '/auth/login',
-        method: 'POST',
-        body: credentials,
-      }),
-    }),
-    
-    register: builder.mutation({
-      query: (userData) => ({
-        url: '/auth/register',
-        method: 'POST',
-        body: userData,
-      }),
-    }),
-    
-    // Пользователи
-    getUsers: builder.query({
-      query: () => '/users',
-      providesTags: ['User'],
-    }),
-    
-    getUserById: builder.query({
-      query: (id) => `/users/${id}`,
-      providesTags: (result, error, id) => [{ type: 'User', id }],
-    }),
-    
-    // Проекты
-    getProjects: builder.query({
-      query: () => '/projects',
-      providesTags: ['Project'],
-    }),
-    
-    getProjectById: builder.query({
-      query: (id) => `/projects/${id}`,
-      providesTags: (result, error, id) => [{ type: 'Project', id }],
-    }),
-    
-    createProject: builder.mutation({
-      query: (projectData) => ({
-        url: '/projects',
-        method: 'POST',
-        body: projectData,
-      }),
-      invalidatesTags: ['Project'],
-    }),
-    
-    updateProject: builder.mutation({
-      query: ({ id, ...projectData }) => ({
-        url: `/projects/${id}`,
-        method: 'PUT',
-        body: projectData,
-      }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'Project', id }],
-    }),
-    
-    deleteProject: builder.mutation({
-      query: (id) => ({
-        url: `/projects/${id}`,
-        method: 'DELETE',
-      }),
-      invalidatesTags: ['Project'],
-    }),
-    
-    // Дефекты
-    getDefects: builder.query({
-      query: (params) => ({
-        url: '/defects',
-        params,
-      }),
-      providesTags: ['Defect'],
-    }),
-    
-    getDefectById: builder.query({
-      query: (id) => `/defects/${id}`,
-      providesTags: (result, error, id) => [{ type: 'Defect', id }],
-    }),
-    
-    createDefect: builder.mutation({
-      query: (defectData) => ({
-        url: '/defects',
-        method: 'POST',
-        body: defectData,
-      }),
-      invalidatesTags: ['Defect'],
-    }),
-    
-    updateDefect: builder.mutation({
-      query: ({ id, ...defectData }) => ({
-        url: `/defects/${id}`,
-        method: 'PUT',
-        body: defectData,
-      }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'Defect', id }],
-    }),
-    
-    deleteDefect: builder.mutation({
-      query: (id) => ({
-        url: `/defects/${id}`,
-        method: 'DELETE',
-      }),
-      invalidatesTags: ['Defect'],
-    }),
-    
-    // Отчеты
-    getReports: builder.query({
-      query: (params) => ({
-        url: '/reports',
-        params,
-      }),
-      providesTags: ['Report'],
-    }),
-    
-    // Вложения
-    uploadAttachment: builder.mutation({
-      query: ({ defectId, file }) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        return {
-          url: `/attachments/${defectId}`,
-          method: 'POST',
-          body: formData,
-          formData: true,
-        };
-      },
-      invalidatesTags: (result, error, { defectId }) => [
-        { type: 'Defect', id: defectId },
-        'Attachment',
-      ],
-    }),
-    
-    deleteAttachment: builder.mutation({
-      query: (id) => ({
-        url: `/attachments/${id}`,
-        method: 'DELETE',
-      }),
-      invalidatesTags: ['Attachment', 'Defect'],
-    }),
-  }),
+// Создаем экземпляр axios с базовым URL
+const api = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Экспортируем хуки для использования в компонентах
-export const {
-  useLoginMutation,
-  useRegisterMutation,
-  useGetUsersQuery,
-  useGetUserByIdQuery,
-  useGetProjectsQuery,
-  useGetProjectByIdQuery,
-  useCreateProjectMutation,
-  useUpdateProjectMutation,
-  useDeleteProjectMutation,
-  useGetDefectsQuery,
-  useGetDefectByIdQuery,
-  useCreateDefectMutation,
-  useUpdateDefectMutation,
-  useDeleteDefectMutation,
-  useGetReportsQuery,
-  useUploadAttachmentMutation,
-  useDeleteAttachmentMutation,
-} = api;
+// Добавляем перехватчик для добавления токена к запросам
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Добавляем перехватчик для обработки ошибок
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    // Обработка ошибки 401 (Unauthorized)
+    if (error.response && error.response.status === 401) {
+      // Если токен истек, очищаем локальное хранилище и перезагружаем страницу
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+// API для аутентификации
+export const authApi = {
+  login: (credentials) => api.post('/auth/login', credentials),
+  register: (userData) => {
+    console.log('Регистрация пользователя с данными:', userData);
+    return api.post('/auth/register', userData);
+  },
+  getMe: () => api.get('/auth/me'),
+  changePassword: (data) => api.post('/auth/change-password', data),
+};
+
+// API для пользователей
+export const usersApi = {
+  getAll: (params) => api.get('/users', { params }),
+  getById: (id) => api.get(`/users/${id}`),
+  create: (userData) => api.post('/users', userData),
+  update: (id, userData) => api.put(`/users/${id}`, userData),
+  delete: (id) => api.delete(`/users/${id}`),
+};
+
+// API для проектов
+export const projectsApi = {
+  getAll: (params) => api.get('/projects', { params }),
+  getById: (id) => api.get(`/projects/${id}`),
+  create: (projectData) => api.post('/projects', projectData),
+  update: (id, projectData) => api.put(`/projects/${id}`, projectData),
+  delete: (id) => api.delete(`/projects/${id}`),
+  
+  // API для этапов проекта
+  getStages: (projectId) => api.get(`/projects/${projectId}/stages`),
+  getStageById: (projectId, stageId) => api.get(`/projects/${projectId}/stages/${stageId}`),
+  createStage: (projectId, stageData) => api.post(`/projects/${projectId}/stages`, stageData),
+  updateStage: (projectId, stageId, stageData) => api.put(`/projects/${projectId}/stages/${stageId}`, stageData),
+  deleteStage: (projectId, stageId) => api.delete(`/projects/${projectId}/stages/${stageId}`),
+};
+
+// API для дефектов
+export const defectsApi = {
+  getAll: (params) => api.get('/defects', { params }),
+  getById: (id) => api.get(`/defects/${id}`),
+  create: (defectData) => api.post('/defects', defectData),
+  update: (id, defectData) => api.put(`/defects/${id}`, defectData),
+  delete: (id) => api.delete(`/defects/${id}`),
+  
+  // API для комментариев к дефектам
+  getComments: (defectId) => api.get(`/defects/${defectId}/comments`),
+  addComment: (defectId, content) => api.post(`/defects/${defectId}/comments`, { content }),
+  updateComment: (defectId, commentId, content) => api.put(`/defects/${defectId}/comments/${commentId}`, { content }),
+  deleteComment: (defectId, commentId) => api.delete(`/defects/${defectId}/comments/${commentId}`),
+};
+
+// API для вложений
+export const attachmentsApi = {
+  getByDefect: (defectId) => api.get(`/defects/${defectId}/attachments`),
+  getById: (id) => api.get(`/attachments/${id}`),
+  upload: (defectId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/defects/${defectId}/attachments`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  delete: (id) => api.delete(`/attachments/${id}`),
+};
+
+// API для отчетов
+export const reportsApi = {
+  getDefectsByStatus: (params) => api.get('/reports/defects/status', { params }),
+  getDefectsByPriority: (params) => api.get('/reports/defects/priority', { params }),
+  getProjectsSummary: () => api.get('/reports/projects/summary'),
+  getUsersPerformance: () => api.get('/reports/users/performance'),
+  exportDefects: (params) => api.get('/reports/export/defects', { params, responseType: 'blob' }),
+  exportProject: (projectId, params) => api.get(`/reports/export/project/${projectId}`, { params, responseType: 'blob' }),
+};
+
+export default api;

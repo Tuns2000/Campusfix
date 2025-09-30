@@ -1,5 +1,4 @@
 const express = require('express');
-const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
 const fs = require('fs');
@@ -25,9 +24,12 @@ const app = express();
 
 // Настройка промежуточного ПО
 app.use(helmet()); // Защита заголовков HTTP
-app.use(cors({ origin: config.server.corsOrigin }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Настройка CORS
+const cors = require('cors');
+app.use(cors());
 
 // Настройка статических файлов для загрузок
 app.use('/uploads', express.static(path.join(__dirname, '..', config.uploads.directory)));

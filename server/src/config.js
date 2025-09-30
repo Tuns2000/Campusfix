@@ -7,7 +7,7 @@ const config = {
     port: parseInt(process.env.DB_PORT || '5432'),
     database: process.env.DB_NAME || 'campusfix',
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
+    password: process.env.DB_PASSWORD || 'ArtemB1998',
     max: 20, // максимальное количество соединений в пуле
     idleTimeoutMillis: 30000
   },
