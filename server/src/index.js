@@ -59,8 +59,18 @@ app.use(errorHandler);
 
 // Запуск сервера
 const PORT = config.server.port;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+  
+  try {
+    // Импортируем и запускаем функцию исправления ограничения status
+    const { fixStatusConstraint } = require('./utils/fixStatusConstraint');
+    await fixStatusConstraint();
+    
+    // Существующий код проверки структуры БД
+  } catch (error) {
+    console.error('Ошибка при исправлении структуры БД:', error);
+  }
 });
 
 module.exports = app; // Для тестирования

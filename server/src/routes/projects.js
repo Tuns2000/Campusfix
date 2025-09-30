@@ -145,6 +145,8 @@ router.post('/', [
     .trim()
 ], async (req, res, next) => {
   try {
+    console.log('Создание проекта. Получены данные:', req.body);
+    
     // Проверка результатов валидации
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -155,24 +157,50 @@ router.post('/', [
       });
     }
     
-    const { name, description } = req.body;
+    // Проверка обязательных полей
+    const { name, description, status, priority } = req.body;
+    if (!name || !description) {
+      return res.status(400).json({
+        success: false,
+        message: 'Название и описание проекта обязательны'
+      });
+    }
+    
+    const { manager_id, start_date, end_date } = req.body;
     
     // Создание проекта
     const result = await db.query(
-      'INSERT INTO projects (name, description, created_at) VALUES ($1, $2, CURRENT_TIMESTAMP) RETURNING id, name, description, created_at',
-      [name, description]
+      `INSERT INTO projects 
+       (name, description, status, priority, manager_id, start_date, end_date, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       RETURNING id, name, description, status, priority, manager_id, start_date, end_date, created_at, updated_at`,
+      [
+        name, 
+        description, 
+        status || 'planned', 
+        priority || 'medium', 
+        manager_id || null, 
+        start_date || null, 
+        end_date || null
+      ]
     );
     
+    // Получаем созданный проект
     const project = result.rows[0];
     
+    // Успешный ответ
     res.status(201).json({
       success: true,
       message: 'Проект успешно создан',
       project
     });
-    
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error('Ошибка при создании проекта:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Ошибка при создании проекта',
+      error: error.message
+    });
   }
 });
 

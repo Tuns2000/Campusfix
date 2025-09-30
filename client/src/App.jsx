@@ -6,8 +6,9 @@ import MainLayout from './components/layouts/MainLayout';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import Dashboard from './pages/Dashboard';
-// import ProjectList from './pages/projects/ProjectList';
-// import ProjectDetails from './pages/projects/ProjectDetails';
+import ProjectList from './pages/projects/ProjectList';
+import ProjectDetails from './pages/projects/ProjectDetails';
+import ProjectForm from './pages/projects/ProjectForm';
 // import DefectList from './pages/defects/DefectList';
 // import DefectDetails from './pages/defects/DefectDetails';
 // import UserList from './pages/users/UserList';
@@ -79,8 +80,10 @@ function App() {
         <Route index element={<Dashboard />} />
         
         <Route path="projects">
-          <Route index element={<div>Список проектов</div>} />
-          <Route path=":id" element={<div>Детали проекта</div>} />
+          <Route index element={<ProjectList />} />
+          <Route path="new" element={<ProjectForm />} />
+          <Route path=":id" element={<ProjectDetails />} />
+          <Route path=":id/edit" element={<ProjectForm />} />
         </Route>
         
         <Route path="defects">
