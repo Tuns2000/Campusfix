@@ -186,12 +186,18 @@ const DefectList = () => {
   };
   
   // Обработчик изменения фильтров
-  const handleFilterChange = (event) => {
-    const { name, value } = event.target;
-    setLocalFilters({
-      ...localFilters,
-      [name]: value === 'all' ? null : value
-    });
+  const handleFilterChange = (filterName, value) => {
+    // Важно: передаем только название поля и его значение, а не весь event объект
+    dispatch(
+      setFilters({
+        [filterName]: value === 'all' || value === '' ? null : value
+      })
+    );
+    
+    // Используем setTimeout, чтобы дать Redux обновить состояние
+    setTimeout(() => {
+      dispatch(fetchDefects());
+    }, 0);
   };
   
   // Применение фильтров
@@ -408,8 +414,8 @@ const DefectList = () => {
                 <InputLabel>Статус</InputLabel>
                 <Select
                   name="status"
-                  value={localFilters.status || 'all'}
-                  onChange={handleFilterChange}
+                  value={filters.status || 'all'}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
                   label="Статус"
                 >
                   <MenuItem value="all">Все статусы</MenuItem>
@@ -427,8 +433,8 @@ const DefectList = () => {
                 <InputLabel>Приоритет</InputLabel>
                 <Select
                   name="priority"
-                  value={localFilters.priority || 'all'}
-                  onChange={handleFilterChange}
+                  value={filters.priority || 'all'}
+                  onChange={(e) => dispatch(setFilters({ priority: e.target.value }))}
                   label="Приоритет"
                 >
                   <MenuItem value="all">Все приоритеты</MenuItem>
@@ -444,8 +450,8 @@ const DefectList = () => {
                 <InputLabel>Проект</InputLabel>
                 <Select
                   name="project_id"
-                  value={localFilters.project_id || 'all'}
-                  onChange={handleFilterChange}
+                  value={filters.project_id || 'all'}
+                  onChange={(e) => handleFilterChange('project_id', e.target.value)}
                   label="Проект"
                 >
                   <MenuItem value="all">Все проекты</MenuItem>

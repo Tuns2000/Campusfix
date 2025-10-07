@@ -91,7 +91,27 @@ export const projectsApi = {
 
 // API для дефектов
 export const defectsApi = {
-  getAll: (filters = {}) => axiosInstance.get('/defects', { params: filters }),
+  getAll: (filters = {}) => {
+    // Очистка фильтров от несериализуемых данных
+    const cleanFilters = Object.fromEntries(
+      Object.entries(filters)
+        .filter(([key, value]) => {
+          // Исключаем объекты событий и другие несериализуемые типы
+          return (
+            value === null ||
+            value === undefined ||
+            typeof value === 'string' ||
+            typeof value === 'number' ||
+            typeof value === 'boolean' ||
+            (typeof value === 'object' && 
+             (Array.isArray(value) || value instanceof Date))
+          );
+        })
+    );
+    
+    // Затем делаем запрос с очищенными фильтрами
+    return axiosInstance.get('/defects', { params: cleanFilters });
+  },
   getById: (id) => axiosInstance.get(`/defects/${id}`),
   create: (data) => {
     // Преобразование приоритета

@@ -4,10 +4,50 @@ import { defectsApi } from '../api';
 // Async thunks
 export const fetchDefects = createAsyncThunk(
   'defects/fetchDefects',
-  async (filters = {}, { rejectWithValue }) => {
+  async (userFilters = {}, { rejectWithValue, getState }) => {
     try {
-      const response = await defectsApi.getAll(filters);
-      return response.data.defects;
+      // Получаем текущие фильтры из состояния
+      const { filters, pagination } = getState().defects;
+      
+      // Создаем копию фильтров, чтобы избежать мутации
+      const safeFilters = { ...filters };
+      
+      // Удаляем несериализуемые значения
+      Object.keys(safeFilters).forEach(key => {
+        const value = safeFilters[key];
+        if (
+          value !== null && 
+          typeof value === 'object' && 
+          !Array.isArray(value) &&
+          !(value instanceof Date)
+        ) {
+          delete safeFilters[key];
+        }
+      });
+      
+      // Объединяем очищенные фильтры с пользовательскими
+      const combinedFilters = {
+        ...safeFilters,
+        ...userFilters,
+        page: pagination.page,
+        limit: pagination.limit
+      };
+      
+      // Удаляем null и undefined значения
+      const cleanFilters = Object.fromEntries(
+        Object.entries(combinedFilters)
+          .filter(([_, v]) => v != null)
+      );
+      
+      console.log('Отправка запроса с фильтрами:', cleanFilters);
+      
+      const response = await defectsApi.getAll(cleanFilters);
+      return {
+        defects: response.data.defects,
+        total: response.data.total,
+        page: response.data.page,
+        limit: response.data.limit
+      };
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || 'Не удалось получить список дефектов'
@@ -121,20 +161,17 @@ export const addComment = createAsyncThunk(
   async ({ defectId, text }, { rejectWithValue, getState }) => {
     try {
       console.log('Отправка комментария:', { text });
-      const response = await defectsApi.addComment(defectId, { text });
+      const response = await defectsApi.addComment(defectId, text);
       
       return response.data.comment;
     } catch (error) {
-      console.error('Ошибка при добавлении комментария:', error.response?.data || error);
-      return rejectWithValue(error.response?.data || {
-        success: false,
-        message: error.message || 'Не удалось добавить комментарий'
-      });
+      return rejectWithValue(
+        error.response?.data?.message || 'Не удалось добавить комментарий'
+      );
     }
   }
 );
 
-// Начальное состояние
 const initialState = {
   defects: [],
   currentDefect: null,
@@ -170,8 +207,24 @@ const defectsSlice = createSlice({
       state.currentDefect = null;
     },
     setFilters: (state, action) => {
-      state.filters = { ...state.filters, ...action.payload };
-      state.pagination.page = 1; // Сбрасываем страницу при изменении фильтров
+      // Проверяем, что action.payload - это объект и не содержит React события
+      if (action.payload && typeof action.payload === 'object') {
+        // Фильтруем только сериализуемые значения
+        const safePayload = Object.fromEntries(
+          Object.entries(action.payload)
+            .filter(([_, value]) => 
+              value === null || 
+              typeof value !== 'object' || 
+              Array.isArray(value)
+            )
+        );
+        
+        // Обновляем фильтры безопасными значениями
+        state.filters = {
+          ...state.filters,
+          ...safePayload
+        };
+      }
     },
     setPage: (state, action) => {
       state.pagination.page = action.payload;
@@ -186,12 +239,16 @@ const defectsSlice = createSlice({
       })
       .addCase(fetchDefects.fulfilled, (state, action) => {
         state.loading = false;
-        // Предполагаем, что с сервера возвращается не только список дефектов, но и метаданные пагинации
-        if (Array.isArray(action.payload)) {
+        
+        // Обрабатываем данные в новом формате с пагинацией
+        if (action.payload && action.payload.defects) {
+          state.defects = action.payload.defects;
+          state.pagination.total = action.payload.total || 0;
+          state.pagination.page = action.payload.page || 1;
+          state.pagination.limit = action.payload.limit || 10;
+        } else if (Array.isArray(action.payload)) {
+          // Поддержка старого формата для совместимости
           state.defects = action.payload;
-        } else {
-          state.defects = action.payload.items || [];
-          state.pagination.total = action.payload.total || state.defects.length;
         }
       })
       .addCase(fetchDefects.rejected, (state, action) => {

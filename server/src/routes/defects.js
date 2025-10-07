@@ -39,12 +39,12 @@ router.get('/', authMiddleware, async (req, res, next) => {
     const params = [];
     
     const { 
-      project, 
-      stage, 
+      project_id, // Изменено с project на project_id для соответствия с клиентом
+      stage_id,  // Изменено с stage на stage_id для соответствия с клиентом
       status, 
       priority, 
-      assignedTo, 
-      reportedBy, 
+      assigned_to, // Изменено с assignedTo на assigned_to
+      reported_by, // Изменено с reportedBy на reported_by
       search, 
       sortBy = 'created_at', 
       sortOrder = 'desc', 
@@ -55,13 +55,13 @@ router.get('/', authMiddleware, async (req, res, next) => {
     const offset = (page - 1) * limit;
     
     // Добавление фильтров
-    if (project) {
-      params.push(project);
+    if (project_id) {
+      params.push(project_id);
       conditions.push(`d.project_id = $${params.length}`);
     }
     
-    if (stage) {
-      params.push(stage);
+    if (stage_id) {
+      params.push(stage_id);
       conditions.push(`d.stage_id = $${params.length}`);
     }
     
@@ -75,18 +75,19 @@ router.get('/', authMiddleware, async (req, res, next) => {
       conditions.push(`d.priority = $${params.length}`);
     }
     
-    if (assignedTo) {
-      params.push(assignedTo);
+    if (assigned_to) {
+      params.push(assigned_to);
       conditions.push(`d.assigned_to = $${params.length}`);
     }
     
-    if (reportedBy) {
-      params.push(reportedBy);
+    if (reported_by) {
+      params.push(reported_by);
       conditions.push(`d.reported_by = $${params.length}`);
     }
     
     if (search) {
       params.push(`%${search}%`);
+      // Исправление для предотвращения ошибки дублирования параметров
       conditions.push(`(d.title ILIKE $${params.length} OR d.description ILIKE $${params.length} OR d.location ILIKE $${params.length})`);
     }
     
@@ -95,17 +96,48 @@ router.get('/', authMiddleware, async (req, res, next) => {
       query += ' AND ' + conditions.join(' AND ');
     }
     
-    // Сортировка и пагинация
-    query += ' ORDER BY d.created_at DESC';
+    // Добавляем сортировку
+    if (sortBy) {
+      // Безопасно добавляем сортировку (защита от SQL-инъекций)
+      const validSortColumns = ['created_at', 'updated_at', 'priority', 'status'];
+      const validSortDirection = ['asc', 'desc'];
+      
+      const safeSortBy = validSortColumns.includes(sortBy) ? sortBy : 'created_at';
+      const safeSortOrder = validSortDirection.includes(sortOrder.toLowerCase()) ? sortOrder : 'desc';
+      
+      query += ` ORDER BY d.${safeSortBy} ${safeSortOrder}`;
+    } else {
+      // Сортировка по умолчанию
+      query += ' ORDER BY d.created_at DESC';
+    }
+    
+    // Добавляем пагинацию
+    query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(parseInt(limit), parseInt(offset));
+    
+    console.log('Выполнение SQL-запроса:', query, params);
     
     // Выполняем запрос
     const result = await db.query(query, params);
+    
+    // Получаем общее количество записей для пагинации
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM defects d
+      WHERE 1=1 ${conditions.length > 0 ? ' AND ' + conditions.join(' AND ') : ''}
+    `;
+    
+    const countResult = await db.query(countQuery, params.slice(0, params.length - 2));
+    const total = parseInt(countResult.rows[0].total);
     
     // Возвращаем результаты
     res.json({
       success: true,
       defects: result.rows,
-      total: result.rows.length
+      total: total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      pages: Math.ceil(total / limit)
     });
   } catch (error) {
     console.error('Ошибка при получении списка дефектов:', error);
