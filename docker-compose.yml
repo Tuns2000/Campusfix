@@ -1,0 +1,100 @@
+# Docker Compose для локальной разработки и тестирования
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: campusfix-db
+    environment:
+      POSTGRES_DB: campusfix
+      POSTGRES_USER: campusfix_user
+      POSTGRES_PASSWORD: campusfix_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./server/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - campusfix-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campusfix_user -d campusfix"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: campusfix-backend
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: campusfix
+      DB_USER: campusfix_user
+      DB_PASSWORD: campusfix_password
+      JWT_SECRET: your-secret-key-replace-in-production
+      CORS_ORIGIN: http://localhost:3000
+    volumes:
+      - ./server/uploads:/app/uploads
+      - ./server/logs:/app/logs
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - campusfix-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend (в production лучше использовать nginx)
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: http://localhost:5000
+    container_name: campusfix-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - campusfix-network
+    restart: unless-stopped
+
+  # Nginx (опционально, для production)
+  nginx:
+    image: nginx:alpine
+    container_name: campusfix-nginx
+    volumes:
+      - ./server/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./client/build:/usr/share/nginx/html
+      - ./server/uploads:/var/www/uploads
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - campusfix-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  campusfix-network:
+    driver: bridge

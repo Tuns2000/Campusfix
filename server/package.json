@@ -6,7 +6,12 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "jest --detectOpenHandles",
+    "test": "jest --detectOpenHandles --forceExit",
+    "test:unit": "jest tests/unit --detectOpenHandles --forceExit",
+    "test:integration": "jest tests/integration --detectOpenHandles --forceExit --runInBand",
+    "test:load": "jest tests/integration/load.test.js --detectOpenHandles --forceExit --runInBand",
+    "test:coverage": "jest --coverage --detectOpenHandles --forceExit",
+    "test:watch": "jest --watch",
     "lint": "eslint src/**/*.js",
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/seed.js"
@@ -31,6 +36,8 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "autocannon": "^7.15.0",
+    "axios": "^1.12.2",
     "eslint": "^8.39.0",
     "jest": "^29.5.0",
     "nodemon": "^2.0.22",
