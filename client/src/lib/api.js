@@ -185,7 +185,10 @@ export const attachmentsApi = {
   }),
   
   // Удаление вложения
-  delete: (attachmentId) => axiosInstance.delete(`/attachments/${attachmentId}`),
+  delete: (attachmentId) => {
+    console.log(`Удаление вложения с ID: ${attachmentId}`);
+    return axiosInstance.delete(`/attachments/${attachmentId}`);
+  },
   
   // Получение URL для скачивания
   getDownloadUrl: (attachmentId) => {

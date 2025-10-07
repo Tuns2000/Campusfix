@@ -205,10 +205,15 @@ export const deleteAttachment = createAsyncThunk(
   'defects/deleteAttachment',
   async (attachmentId, { rejectWithValue }) => {
     try {
+      console.log(`Отправка запроса на удаление вложения с ID: ${attachmentId}`);
       const response = await attachmentsApi.delete(attachmentId);
+      console.log('Ответ от сервера:', response.data);
       return { id: attachmentId, ...response.data };
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Не удалось удалить файл');
+      console.error('Ошибка при удалении вложения:', error.response?.data || error);
+      return rejectWithValue(
+        error.response?.data?.message || 'Не удалось удалить файл'
+      );
     }
   }
 );
