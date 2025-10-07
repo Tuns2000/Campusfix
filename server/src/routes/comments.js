@@ -30,27 +30,32 @@ router.get('/:defectId/comments', [
     
     // Получение всех комментариев к дефекту
     const result = await db.query(`
-      SELECT c.*,
+      SELECT 
+        c.*,
+        u.id as user_id,
+        u.first_name,
+        u.last_name,
         u.first_name || ' ' || u.last_name as user_name,
         u.email as user_email,
         u.role as user_role
       FROM comments c
-      JOIN users u ON c.user_id = u.id
+      LEFT JOIN users u ON c.user_id = u.id
       WHERE c.defect_id = $1
       ORDER BY c.created_at DESC
     `, [defectId]);
     
+    // Около строки 44, изменить структуру ответа для единообразия
     const comments = result.rows.map(comment => ({
       id: comment.id,
       text: comment.text,
       user: {
         id: comment.user_id,
-        name: comment.user_name,
-        email: comment.user_email,
-        role: comment.user_role
+        name: comment.user_name || 'Пользователь', 
+        email: comment.user_email || '',
+        role: comment.user_role || 'user'
       },
-      createdAt: comment.created_at,
-      updatedAt: comment.updated_at
+      createdAt: comment.created_at instanceof Date ? comment.created_at.toISOString() : comment.created_at,
+      updatedAt: comment.updated_at instanceof Date ? comment.updated_at.toISOString() : comment.updated_at
     }));
     
     res.json({
@@ -154,12 +159,24 @@ router.post('/:defectId/comments', [
     const result = await db.query(insertQuery, queryParams);
     
     // Получаем данные пользователя
-    const userResult = await db.query('SELECT id, email FROM users WHERE id = $1', [userId]);
+    const userResult = await db.query(
+      'SELECT id, first_name, last_name, email, role FROM users WHERE id = $1', 
+      [userId]
+    );
     
     // Формируем ответ с данными
     const comment = {
-      ...result.rows[0],
-      user: userResult.rows[0] || { id: userId }
+      id: result.rows[0].id,
+      defect_id: result.rows[0].defect_id,
+      text: result.rows[0].text,
+      user: {
+        id: userId,
+        name: (userResult.rows[0]?.first_name || '') + ' ' + (userResult.rows[0]?.last_name || '') || 'Пользователь',
+        email: userResult.rows[0]?.email || '',
+        role: userResult.rows[0]?.role || 'user'
+      },
+      createdAt: result.rows[0].created_at instanceof Date ? result.rows[0].created_at.toISOString() : result.rows[0].created_at,
+      updatedAt: result.rows[0].updated_at instanceof Date ? result.rows[0].updated_at.toISOString() : result.rows[0].updated_at
     };
     
     res.status(201).json({

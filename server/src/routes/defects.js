@@ -223,7 +223,9 @@ router.get('/:id', async (req, res, next) => {
       })),
       comments: commentsResult.rows.map(comment => ({
         id: comment.id,
-        content: comment.content,
+        // Было неправильное имя поля:
+        text: comment.text,
+        
         user: {
           id: comment.user_id,
           name: comment.user_name,

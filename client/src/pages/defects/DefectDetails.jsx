@@ -56,17 +56,39 @@ import LoadingScreen from '../../components/common/LoadingScreen';
 
 // Форматирование даты
 const formatDate = (dateString) => {
-  return new Date(dateString).toLocaleDateString('ru-RU', { 
-    day: 'numeric',
-    month: 'long', 
-    year: 'numeric' 
-  });
+  if (!dateString) return 'Дата не указана';
+  
+  // Преобразуем в объект Date
+  const date = new Date(dateString);
+  
+  // Проверяем, что дата валидна
+  if (isNaN(date.getTime())) return 'Некорректная дата';
+  
+  // Форматируем дату для отображения
+  return new Intl.DateTimeFormat('ru', {
+    day: '2-digit',
+    month: '2-digit', 
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
 };
 
 // Форматирование времени
 const formatDateTime = (dateString) => {
-  const date = new Date(dateString);
-  return `${date.toLocaleDateString('ru-RU')} ${date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+  if (!dateString) return 'Дата не указана';
+  
+  try {
+    const date = new Date(dateString);
+    
+    // Проверяем, что дата валидна
+    if (isNaN(date.getTime())) return 'Некорректная дата';
+    
+    return `${date.toLocaleDateString('ru-RU')} ${date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+  } catch (error) {
+    console.error('Ошибка форматирования даты:', dateString, error);
+    return 'Ошибка даты';
+  }
 };
 
 // Получение иконки для типа файла
@@ -226,23 +248,36 @@ const CommentsTab = ({ comments = [], defectId, onAddComment }) => {
               <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                 <ListItemAvatar>
                   <Avatar
-                    src={comment.user_avatar}
-                    alt={comment.user_name}
+                    src={comment.user?.avatar}
+                    alt={comment.user?.name}
                     sx={{ bgcolor: theme.palette.primary.main }}
                   >
-                    {comment.user_name && comment.user_name.charAt(0)}
+                    {comment.user?.name ? comment.user.name.charAt(0) : 'П'}
                   </Avatar>
                 </ListItemAvatar>
                 <Box sx={{ flexGrow: 1 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="subtitle2" fontWeight="bold">
-                      {comment.user_name || 'Пользователь'}
+                      {comment.user?.name || 'Пользователь'}
+                      {comment.user?.role && 
+                        <Chip size="small" label={comment.user.role} sx={{ml: 1, fontSize: '0.7rem'}} />
+                      }
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {formatDateTime(comment.created_at)}
+                      {formatDateTime(comment.createdAt || comment.created_at)}
                     </Typography>
                   </Box>
-                  <Typography variant="body2" sx={{ mt: 1, whiteSpace: 'pre-wrap' }}>
+                  
+                  {/* Добавьте или исправьте следующий блок текста комментария */}
+                  <Typography 
+                    variant="body1" 
+                    sx={{ 
+                      mt: 1, 
+                      whiteSpace: 'pre-wrap',
+                      color: 'text.primary',
+                      fontWeight: 'normal'
+                    }}
+                  >
                     {comment.text}
                   </Typography>
                 </Box>

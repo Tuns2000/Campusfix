@@ -21,11 +21,28 @@ export const fetchDefectById = createAsyncThunk(
   async (id, { rejectWithValue }) => {
     try {
       const response = await defectsApi.getById(id);
-      return response.data.defect;
+      
+      // Нормализуем структуру комментариев если они есть
+      const defect = response.data.defect;
+      
+      if (defect && defect.comments) {
+        // Убедимся, что все комментарии имеют правильную структуру
+        defect.comments = defect.comments.map(comment => ({
+          ...comment,
+          // Если старый формат, преобразуем к новому
+          user: comment.user || {
+            id: comment.user_id,
+            name: comment.user_name || 'Пользователь',
+            role: comment.user_role || 'user'
+          },
+          createdAt: comment.createdAt || comment.created_at,
+          updatedAt: comment.updatedAt || comment.updated_at
+        }));
+      }
+      
+      return defect;
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Не удалось получить данные дефекта'
-      );
+      return rejectWithValue(error.response?.data?.message || 'Не удалось загрузить дефект');
     }
   }
 );
@@ -263,7 +280,21 @@ const defectsSlice = createSlice({
           if (!state.currentDefect.comments) {
             state.currentDefect.comments = [];
           }
-          state.currentDefect.comments.unshift(action.payload);
+          
+          // Нормализуем структуру добавляемого комментария
+          const normalizedComment = {
+            ...action.payload,
+            // Убедимся что у нас правильная структура
+            user: action.payload.user || {
+              id: action.payload.user_id,
+              name: action.payload.user_name || 'Пользователь',
+              role: action.payload.user_role || 'user'
+            },
+            createdAt: action.payload.createdAt || action.payload.created_at,
+            updatedAt: action.payload.updatedAt || action.payload.updated_at
+          };
+          
+          state.currentDefect.comments.unshift(normalizedComment);
         }
       })
       .addCase(addComment.rejected, (state, action) => {
