@@ -153,46 +153,6 @@ const getPriorityInfo = (priority) => {
 // Компонент вложений
 const AttachmentsTab = ({ attachments = [] }) => {
   const theme = useTheme();
-  
-  return (
-    <Box sx={{ p: 3 }}>
-      {attachments.length > 0 ? (
-        <List>
-          {attachments.map((attachment, index) => (
-            <Paper
-              key={index}
-              elevation={1}
-              sx={{
-                mb: 2,
-                borderRadius: 2,
-                overflow: 'hidden'
-              }}
-            >
-              <ListItem
-                button
-                component="a"
-                href={attachment.url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ListItemIcon>
-                  {getFileIcon(attachment.filename)}
-                </ListItemIcon>
-                <ListItemText
-                  primary={attachment.filename}
-                  secondary={`Добавлено: ${formatDateTime(attachment.uploaded_at)}`}
-                />
-              </ListItem>
-            </Paper>
-          ))}
-        </List>
-      ) : (
-        <Typography color="text.secondary" align="center">
-          Нет прикрепленных файлов
-        </Typography>
-      )}
-    </Box>
-  );
 };
 
 // Компонент комментариев
