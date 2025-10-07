@@ -171,11 +171,108 @@ export const usersApi = {
   delete: (id) => axiosInstance.delete(`/users/${id}`)
 };
 
-// API для отчетов
+// Обновленные функции для работы с отчетами
 export const reportsApi = {
-  getProjectsStats: () => axiosInstance.get('/reports/projects'),
-  getDefectsStats: () => axiosInstance.get('/reports/defects'),
-  getUsersStats: () => axiosInstance.get('/reports/users')
+  // Экспорт отчета по дефектам
+  exportDefects: async (format = 'excel', filters = {}) => {
+    try {
+      const queryParams = new URLSearchParams({ format, ...filters });
+      const response = await fetch(`${API_BASE_URL}/reports/defects?${queryParams}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Ошибка при экспорте данных');
+      }
+      
+      // Получаем имя файла из заголовка ответа
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let fileName;
+
+      if (contentDisposition) {
+        fileName = contentDisposition.split('filename=')[1].replace(/"/g, '');
+      } else {
+        // Используем правильное расширение
+        const extension = format === 'excel' ? 'xlsx' : 'csv';
+        fileName = `defects_report.${extension}`;
+      }
+      
+      // Создаем ссылку для скачивания файла
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Принудительно проверяем расширение и исправляем его если нужно
+      if (format === 'excel' && fileName.endsWith('.excel')) {
+        fileName = fileName.replace('.excel', '.xlsx');
+      }
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Очищаем ресурсы
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Ошибка при экспорте дефектов:', error);
+      alert('Не удалось экспортировать данные: ' + error.message);
+      return { success: false, message: error.message };
+    }
+  },
+  
+  // Экспорт отчета по проектам - аналогично для проектов
+  exportProjects: async (format = 'excel') => {
+    try {
+      const queryParams = new URLSearchParams({ format });
+      const response = await fetch(`${API_BASE_URL}/reports/projects?${queryParams}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Ошибка при экспорте данных');
+      }
+      
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let fileName;
+
+      if (contentDisposition) {
+        fileName = contentDisposition.split('filename=')[1].replace(/"/g, '');
+      } else {
+        // Используем правильное расширение
+        const extension = format === 'excel' ? 'xlsx' : 'csv';
+        fileName = `projects_report.${extension}`;
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Принудительно проверяем расширение и исправляем его если нужно
+      if (format === 'excel' && fileName.endsWith('.excel')) {
+        fileName = fileName.replace('.excel', '.xlsx');
+      }
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Ошибка при экспорте проектов:', error);
+      alert('Не удалось экспортировать данные: ' + error.message);
+      return { success: false, message: error.message };
+    }
+  }
 };
 
 export default axiosInstance;

@@ -33,7 +33,9 @@ import {
   Person as PersonIcon,
   Flag as FlagIcon
 } from '@mui/icons-material';
+import DownloadIcon from '@mui/icons-material/Download';
 import { fetchProjects, deleteProject, resetProjectMessages } from '../../lib/slices/projectsSlice';
+import { reportsApi } from '../../lib/api';
 import LoadingScreen from '../../components/common/LoadingScreen';
 
 // Функция форматирования даты
@@ -133,6 +135,11 @@ const ProjectList = () => {
     setDeleteDialogOpen(false);
   };
   
+  // Функция экспорта проектов
+  const handleExportProjects = (format = 'excel') => {
+    reportsApi.exportProjects(format);
+  };
+
   if (loading && projects.length === 0) {
     return <LoadingScreen />;
   }

@@ -43,15 +43,10 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/projects', require('./routes/projects'));
-// Маршруты для этапов проектов (вложенные в /api/projects)
-app.use('/api/projects', require('./routes/projectStages'));
+app.use('/api/project-stages', require('./routes/projectStages'));
 app.use('/api/defects', require('./routes/defects'));
-// Маршруты для комментариев к дефектам
-app.use('/api/defects', require('./routes/comments'));
-// Маршруты для вложений
 app.use('/api/attachments', require('./routes/attachments'));
-// Маршруты для вложений в дефектах
-app.use('/api', require('./routes/attachments'));
+// Добавляем маршрут для отчетов
 app.use('/api/reports', require('./routes/reports'));
 
 // Обработка ошибок

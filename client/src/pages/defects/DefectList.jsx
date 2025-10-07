@@ -38,11 +38,14 @@ import {
   Person as PersonIcon,
   CalendarMonth as CalendarIcon,
   Flag as FlagIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  Download as DownloadIcon
 } from '@mui/icons-material';
 import { fetchDefects, deleteDefect, resetDefectMessages, setFilters, setPage } from '../../lib/slices/defectsSlice';
 import { fetchProjects } from '../../lib/slices/projectsSlice';
 import LoadingScreen from '../../components/common/LoadingScreen';
+import { reportsApi } from '../../lib/api';
+import ExportDialog from '../../components/reports/ExportDialog';
 
 // Форматирование даты
 const formatDate = (dateString) => {
@@ -114,6 +117,7 @@ const DefectList = () => {
   const [selectedDefectId, setSelectedDefectId] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [localFilters, setLocalFilters] = useState(filters);
+  const [openExportDialog, setOpenExportDialog] = useState(false);
   
   // Загрузка данных при монтировании
   useEffect(() => {
@@ -297,6 +301,73 @@ const DefectList = () => {
     return <LoadingScreen />;
   }
   
+  // Функция для открытия диалога экспорта
+  const handleOpenExportDialog = () => {
+    setOpenExportDialog(true);
+  };
+
+  // Добавьте в карточки фильтров в панель инструментов
+  const renderToolbar = () => (
+    <Grid container spacing={2} alignItems="center" sx={{ mb: 3 }}>
+      <Grid item xs={12} md={6}>
+        <TextField
+          fullWidth
+          variant="outlined"
+          placeholder="Поиск дефектов..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon color="action" />
+              </InputAdornment>
+            ),
+            endAdornment: searchTerm && (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={handleSearch}>
+                  <SearchIcon />
+                </IconButton>
+              </InputAdornment>
+            ),
+            sx: { borderRadius: 2, bgcolor: 'background.paper' }
+          }}
+        />
+      </Grid>
+      
+      <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Button
+          variant="outlined"
+          color="primary"
+          startIcon={<FilterIcon />}
+          onClick={() => setShowFilters(!showFilters)}
+          sx={{ borderRadius: 2, mr: 1 }}
+        >
+          Фильтры
+        </Button>
+        
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={() => {
+            dispatch(fetchDefects(filters));
+          }}
+          sx={{ borderRadius: 2 }}
+        >
+          Обновить
+        </Button>
+        
+        <Button
+          variant="outlined"
+          startIcon={<DownloadIcon />}
+          onClick={handleOpenExportDialog}
+        >
+          Экспорт
+        </Button>
+      </Grid>
+    </Grid>
+  );
+  
   return (
     <Box sx={{ p: 3 }}>
       {/* Заголовок и кнопка создания */}
@@ -322,56 +393,7 @@ const DefectList = () => {
       </Box>
       
       {/* Поиск и фильтры */}
-      <Grid container spacing={2} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={6}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Поиск дефектов..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon color="action" />
-                </InputAdornment>
-              ),
-              endAdornment: searchTerm && (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={handleSearch}>
-                    <SearchIcon />
-                  </IconButton>
-                </InputAdornment>
-              ),
-              sx: { borderRadius: 2, bgcolor: 'background.paper' }
-            }}
-          />
-        </Grid>
-        
-        <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Button
-            variant="outlined"
-            color="primary"
-            startIcon={<FilterIcon />}
-            onClick={() => setShowFilters(!showFilters)}
-            sx={{ borderRadius: 2, mr: 1 }}
-          >
-            Фильтры
-          </Button>
-          
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={() => {
-              dispatch(fetchDefects(filters));
-            }}
-            sx={{ borderRadius: 2 }}
-          >
-            Обновить
-          </Button>
-        </Grid>
-      </Grid>
+      {renderToolbar()}
       
       {/* Панель фильтров */}
       {showFilters && (
@@ -717,6 +739,12 @@ const DefectList = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Диалог экспорта */}
+      <ExportDialog
+        open={openExportDialog}
+        onClose={() => setOpenExportDialog(false)}
+      />
     </Box>
   );
 };

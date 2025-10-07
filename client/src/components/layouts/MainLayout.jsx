@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { 
@@ -31,9 +31,12 @@ import {
   Person as PersonIcon,
   ExitToApp as LogoutIcon,
   Settings as SettingsIcon,
+  Download as DownloadIcon,
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { logout } from '../../lib/slices/authSlice';
+import { fetchProjects } from '../../lib/slices/projectsSlice';
+import ExportDialog from '../reports/ExportDialog';
 
 const drawerWidth = 240;
 
@@ -84,9 +87,14 @@ const DrawerHeader = styled('div')(({ theme }) => ({
 const MainLayout = () => {
   const [open, setOpen] = useState(true);
   const [anchorElUser, setAnchorElUser] = useState(null);
+  const [openExportDialog, setOpenExportDialog] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
+
+  useEffect(() => {
+    dispatch(fetchProjects());
+  }, [dispatch]);
 
   const handleDrawerOpen = () => {
     setOpen(true);
@@ -112,6 +120,14 @@ const MainLayout = () => {
   const handleNavigate = (path) => {
     navigate(path);
   };
+
+  const handleExportClick = () => {
+    setOpenExportDialog(true);
+  };
+
+  const handleCloseExportDialog = () => {
+    setOpenExportDialog(false);
+  };
   
   // Определение доступных пунктов меню на основе роли пользователя
   const menuItems = [
@@ -128,7 +144,7 @@ const MainLayout = () => {
   );
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       {/* App Bar */}
       <AppBarStyled position="fixed" open={open}>
         <Toolbar>
@@ -144,6 +160,13 @@ const MainLayout = () => {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             CampusFix
           </Typography>
+          
+          {/* Кнопка экспорта с обработчиком */}
+          <Tooltip title="Экспорт отчета">
+            <IconButton color="inherit" onClick={handleExportClick}>
+              <DownloadIcon />
+            </IconButton>
+          </Tooltip>
           
           {/* User Profile Menu */}
           <Box sx={{ flexGrow: 0 }}>
@@ -244,6 +267,12 @@ const MainLayout = () => {
           <Outlet />
         </Container>
       </Main>
+
+      {/* Диалог экспорта */}
+      <ExportDialog 
+        open={openExportDialog} 
+        onClose={handleCloseExportDialog} 
+      />
     </Box>
   );
 };
