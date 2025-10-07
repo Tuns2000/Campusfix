@@ -26,7 +26,8 @@ import {
   DialogContent,
   DialogActions,
   useTheme,
-  alpha
+  alpha,
+  Alert
 } from '@mui/material';
 import { 
   Edit as EditIcon,
@@ -50,9 +51,14 @@ import {
   resetCurrentDefect, 
   deleteDefect, 
   addComment,  // Заменено с addDefectComment на addComment
-  updateDefect
+  updateDefect,
+  fetchAttachments,
+  uploadAttachments,
+  deleteAttachment
 } from '../../lib/slices/defectsSlice';
 import LoadingScreen from '../../components/common/LoadingScreen';
+import FileUploader from '../../components/common/FileUploader';
+import AttachmentList from '../../components/common/AttachmentList';
 
 // Форматирование даты
 const formatDate = (dateString) => {
@@ -314,6 +320,11 @@ const DefectDetails = () => {
   const [submitting, setSubmitting] = useState(false);
   const [statusValue, setStatusValue] = useState('');
   const [errorStatus, setError] = useState('');
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  
+  // Выбор данных о вложениях из Redux store
+  const { attachments } = useSelector(state => state.defects);
   
   // Загрузка данных при монтировании
   useEffect(() => {
@@ -331,6 +342,15 @@ const DefectDetails = () => {
       setStatusValue(currentDefect.status);
     }
   }, [currentDefect]);
+  
+  // Загружаем вложения при загрузке дефекта
+  useEffect(() => {
+    if (id) {
+      setAttachmentsLoading(true);
+      dispatch(fetchAttachments(id))
+        .finally(() => setAttachmentsLoading(false));
+    }
+  }, [id, dispatch]);
   
   // Обработчик изменения вкладки
   const handleTabChange = (event, newValue) => {
@@ -417,6 +437,46 @@ const DefectDetails = () => {
       text: commentData.text
     }));
   };
+  
+  // Функция для загрузки файлов
+  const handleUploadFiles = async (files) => {
+    try {
+      setUploadError(null);
+      const formData = new FormData();
+      
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+      
+      await dispatch(uploadAttachments({ defectId: id, formData })).unwrap();
+      
+      // Обновляем список вложений
+      dispatch(fetchAttachments(id));
+    } catch (error) {
+      console.error('Ошибка при загрузке файлов:', error);
+      setUploadError(error.message || 'Не удалось загрузить файлы');
+    }
+  };
+  
+  // Функция для удаления файла
+  const handleDeleteAttachment = async (attachmentId) => {
+    try {
+      await dispatch(deleteAttachment(attachmentId)).unwrap();
+      
+      // Обновляем список вложений
+      dispatch(fetchAttachments(id));
+    } catch (error) {
+      console.error('Ошибка при удалении файла:', error);
+      // Можно добавить отображение ошибки
+    }
+  };
+  
+  // Проверка прав на удаление вложений
+  const canDeleteAttachments = user && (
+    user.role === 'admin' || 
+    user.role === 'manager' || 
+    currentDefect?.reported_by === user.id
+  );
   
   if (loading && !currentDefect) {
     return <LoadingScreen />;
@@ -836,6 +896,40 @@ const DefectDetails = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Вкладка вложений */}
+      {tabValue === 1 && (
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Вложения
+          </Typography>
+          
+          {user && user.role !== 'observer' && (
+            <Paper sx={{ p: 2, mb: 3 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                Загрузка новых файлов
+              </Typography>
+              <FileUploader 
+                onUpload={handleUploadFiles} 
+                maxFiles={5} 
+                maxSize={10} 
+              />
+              {uploadError && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {uploadError}
+                </Alert>
+              )}
+            </Paper>
+          )}
+          
+          <AttachmentList 
+            attachments={attachments} 
+            loading={attachmentsLoading}
+            onDelete={canDeleteAttachments ? handleDeleteAttachment : null}
+            canDelete={canDeleteAttachments}
+          />
+        </Box>
+      )}
     </Box>
   );
 };

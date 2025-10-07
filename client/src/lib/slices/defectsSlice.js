@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { defectsApi } from '../api';
+import { defectsApi, attachmentsApi } from '../api';
 
 // Async thunks
 export const fetchDefects = createAsyncThunk(
@@ -172,6 +172,47 @@ export const addComment = createAsyncThunk(
   }
 );
 
+// Добавьте новые thunks и состояния для вложений
+
+// Загрузка списка вложений дефекта
+export const fetchAttachments = createAsyncThunk(
+  'defects/fetchAttachments',
+  async (defectId, { rejectWithValue }) => {
+    try {
+      const response = await attachmentsApi.getByDefect(defectId);
+      return response.data.attachments;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Не удалось загрузить вложения');
+    }
+  }
+);
+
+// Загрузка файлов на сервер
+export const uploadAttachments = createAsyncThunk(
+  'defects/uploadAttachments',
+  async ({ defectId, formData }, { rejectWithValue }) => {
+    try {
+      const response = await attachmentsApi.upload(defectId, formData);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Не удалось загрузить файлы');
+    }
+  }
+);
+
+// Удаление вложения
+export const deleteAttachment = createAsyncThunk(
+  'defects/deleteAttachment',
+  async (attachmentId, { rejectWithValue }) => {
+    try {
+      const response = await attachmentsApi.delete(attachmentId);
+      return { id: attachmentId, ...response.data };
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Не удалось удалить файл');
+    }
+  }
+);
+
 const initialState = {
   defects: [],
   currentDefect: null,
@@ -190,7 +231,10 @@ const initialState = {
     page: 1,
     limit: 10,
     total: 0
-  }
+  },
+  attachments: [],
+  attachmentsLoading: false,
+  attachmentsError: null,
 };
 
 const defectsSlice = createSlice({
@@ -356,6 +400,37 @@ const defectsSlice = createSlice({
       })
       .addCase(addComment.rejected, (state, action) => {
         state.error = action.payload?.message || 'Ошибка при добавлении комментария';
+      })
+      
+      // Обработчики для вложений
+      .addCase(fetchAttachments.pending, (state) => {
+        state.attachmentsLoading = true;
+        state.attachmentsError = null;
+      })
+      .addCase(fetchAttachments.fulfilled, (state, action) => {
+        state.attachmentsLoading = false;
+        state.attachments = action.payload;
+      })
+      .addCase(fetchAttachments.rejected, (state, action) => {
+        state.attachmentsLoading = false;
+        state.attachmentsError = action.payload;
+      })
+      
+      .addCase(uploadAttachments.pending, (state) => {
+        state.attachmentsLoading = true;
+        state.attachmentsError = null;
+      })
+      .addCase(uploadAttachments.fulfilled, (state) => {
+        state.attachmentsLoading = false;
+      })
+      .addCase(uploadAttachments.rejected, (state, action) => {
+        state.attachmentsLoading = false;
+        state.attachmentsError = action.payload;
+      })
+      
+      .addCase(deleteAttachment.fulfilled, (state, action) => {
+        const attachmentId = action.payload.id;
+        state.attachments = state.attachments.filter(attachment => attachment.id !== attachmentId);
       });
   }
 });

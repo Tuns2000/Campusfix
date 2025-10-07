@@ -3,6 +3,9 @@ const { body, query, param, validationResult } = require('express-validator');
 const db = require('../services/db');
 const authMiddleware = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
 
@@ -639,6 +642,55 @@ router.delete('/:id', roleCheck(['admin', 'manager']), async (req, res, next) =>
   }
 });
 
+// Получение списка вложений для дефекта
+router.get('/:id/attachments', [
+  authMiddleware,
+  param('id').isInt().withMessage('ID дефекта должно быть целым числом')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ошибка валидации данных',
+        errors: errors.array()
+      });
+    }
+
+    const defectId = parseInt(req.params.id);
+    
+    // Проверяем существование дефекта
+    const defectExists = await db.query('SELECT * FROM defects WHERE id = $1', [defectId]);
+    
+    if (defectExists.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Дефект не найден'
+      });
+    }
+
+    // Получаем список вложений для дефекта
+    const result = await db.query(`
+      SELECT a.*, u.first_name, u.last_name
+      FROM attachments a
+      LEFT JOIN users u ON a.uploaded_by = u.id
+      WHERE a.defect_id = $1
+      ORDER BY a.created_at DESC
+    `, [defectId]);
+
+    res.json({
+      success: true,
+      attachments: result.rows
+    });
+  } catch (error) {
+    console.error('Ошибка при получении вложений дефекта:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Внутренняя ошибка сервера при получении вложений'
+    });
+  }
+});
+
 // Добавить перенаправление комментариев (если это еще не сделано)
 
 const commentsRouter = require('./comments');
@@ -701,5 +753,152 @@ function checkStatusTransition(currentStatus, newStatus, userRole) {
   
   return allowedForStatus.includes(newStatus);
 }
+
+// Настройка хранилища для загрузки файлов
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Создаем папку с текущим годом-месяцем для организации файлов
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    
+    const dir = path.join(process.env.UPLOAD_PATH || './uploads', `${year}-${month}`);
+    
+    // Создаем папку, если она не существует
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    // Генерируем уникальное имя файла
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const fileExt = path.extname(file.originalname);
+    cb(null, uniqueSuffix + fileExt);
+  }
+});
+
+// Фильтрация файлов по типу
+const fileFilter = (req, file, cb) => {
+  // Разрешенные типы файлов
+  const allowedTypes = [
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf',
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain'
+  ];
+  
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Неподдерживаемый тип файла. Разрешены только изображения, PDF, документы Word/Excel и текстовые файлы.'), false);
+  }
+};
+
+// Настройка загрузчика
+const upload = multer({ 
+  storage, 
+  fileFilter,
+  limits: { 
+    fileSize: 10 * 1024 * 1024, // 10MB максимальный размер
+    files: 5 // максимум 5 файлов
+  } 
+});
+
+// Маршрут для загрузки вложений к дефекту
+router.post('/:id/attachments', [
+  authMiddleware,
+  param('id').isInt().withMessage('ID дефекта должно быть целым числом')
+], upload.array('files'), async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      // Удаляем загруженные файлы в случае ошибки
+      if (req.files) {
+        req.files.forEach(file => {
+          fs.unlinkSync(file.path);
+        });
+      }
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Ошибка валидации данных',
+        errors: errors.array()
+      });
+    }
+
+    const defectId = parseInt(req.params.id);
+    const userId = req.user.id;
+    
+    // Проверяем существование дефекта
+    const defectExists = await db.query('SELECT * FROM defects WHERE id = $1', [defectId]);
+    
+    if (defectExists.rows.length === 0) {
+      // Удаляем загруженные файлы
+      if (req.files) {
+        req.files.forEach(file => {
+          fs.unlinkSync(file.path);
+        });
+      }
+      
+      return res.status(404).json({
+        success: false,
+        message: 'Дефект не найден'
+      });
+    }
+
+    // Если файлы не были загружены
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Не выбраны файлы для загрузки'
+      });
+    }
+
+    // Сохраняем информацию о вложениях в базу данных
+    const savedAttachments = [];
+    
+    for (const file of req.files) {
+      const result = await db.query(`
+        INSERT INTO attachments 
+        (defect_id, file_name, file_path, file_type, file_size, uploaded_by)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `, [
+        defectId,
+        file.originalname,
+        file.path,
+        file.mimetype,
+        file.size,
+        userId
+      ]);
+      
+      savedAttachments.push(result.rows[0]);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Файлы успешно загружены',
+      attachments: savedAttachments
+    });
+  } catch (error) {
+    // Удаляем загруженные файлы в случае ошибки
+    if (req.files) {
+      req.files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
+    
+    console.error('Ошибка при загрузке вложений:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Внутренняя ошибка сервера при загрузке файлов'
+    });
+  }
+});
 
 module.exports = router;

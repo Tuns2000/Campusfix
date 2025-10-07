@@ -176,8 +176,26 @@ export const defectsApi = {
 
 // API для вложений
 export const attachmentsApi = {
-  download: (id) => axiosInstance.get(`/attachments/${id}`, { responseType: 'blob' }),
-  delete: (id) => axiosInstance.delete(`/attachments/${id}`)
+  // Получение списка вложений для дефекта
+  getByDefect: (defectId) => axiosInstance.get(`/defects/${defectId}/attachments`),
+  
+  // Загрузка файла к дефекту
+  upload: (defectId, formData) => axiosInstance.post(`/defects/${defectId}/attachments`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  
+  // Удаление вложения
+  delete: (attachmentId) => axiosInstance.delete(`/attachments/${attachmentId}`),
+  
+  // Получение URL для скачивания
+  getDownloadUrl: (attachmentId) => {
+    // Добавляем токен для авторизации при скачивании
+    const token = localStorage.getItem('token');
+    return `${axiosInstance.defaults.baseURL}/attachments/${attachmentId}?token=${token}`;
+  },
+  
+  // Получение URL для предпросмотра - без авторизации
+  getPreviewUrl: (attachmentId) => `${axiosInstance.defaults.baseURL}/attachments/${attachmentId}/preview`
 };
 
 // API для пользователей
