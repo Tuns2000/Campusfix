@@ -129,7 +129,13 @@ export const defectsApi = {
   },
   update: (id, data) => axiosInstance.put(`/defects/${id}`, data),
   delete: (id) => axiosInstance.delete(`/defects/${id}`),
-  addComment: (defectId, comment) => axiosInstance.post(`/defects/${defectId}/comments`, comment),
+  addComment: (defectId, commentData) => {
+    // Убедимся, что отправляем только поле 'text'
+    const payload = { text: commentData.text };
+    
+    console.log(`Отправка комментария к дефекту ${defectId}:`, payload);
+    return axiosInstance.post(`/defects/${defectId}/comments`, payload);
+  },
   uploadAttachments: (defectId, files) => {
     if (!files || files.length === 0) {
       console.log('Нет файлов для загрузки');

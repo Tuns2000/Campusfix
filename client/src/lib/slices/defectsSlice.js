@@ -98,16 +98,21 @@ export const deleteDefect = createAsyncThunk(
   }
 );
 
-export const addDefectComment = createAsyncThunk(
+// Обновить action для добавления комментариев
+export const addComment = createAsyncThunk(
   'defects/addComment',
-  async ({ defectId, comment }, { rejectWithValue }) => {
+  async ({ defectId, text }, { rejectWithValue, getState }) => {
     try {
-      const response = await defectsApi.addComment(defectId, comment);
+      console.log('Отправка комментария:', { text });
+      const response = await defectsApi.addComment(defectId, { text });
+      
       return response.data.comment;
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Не удалось добавить комментарий'
-      );
+      console.error('Ошибка при добавлении комментария:', error.response?.data || error);
+      return rejectWithValue(error.response?.data || {
+        success: false,
+        message: error.message || 'Не удалось добавить комментарий'
+      });
     }
   }
 );
@@ -243,18 +248,26 @@ const defectsSlice = createSlice({
       })
       .addCase(deleteDefect.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
-        state.deleteSuccess = false;
-      })
-      
-      // addDefectComment
-      .addCase(addDefectComment.fulfilled, (state, action) => {
+       
         if (state.currentDefect) {
           if (!state.currentDefect.comments) {
             state.currentDefect.comments = [];
           }
           state.currentDefect.comments.push(action.payload);
         }
+      })
+      
+      // Добавление комментария
+      .addCase(addComment.fulfilled, (state, action) => {
+        if (state.currentDefect) {
+          if (!state.currentDefect.comments) {
+            state.currentDefect.comments = [];
+          }
+          state.currentDefect.comments.unshift(action.payload);
+        }
+      })
+      .addCase(addComment.rejected, (state, action) => {
+        state.error = action.payload?.message || 'Ошибка при добавлении комментария';
       });
   }
 });

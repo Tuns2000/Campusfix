@@ -1,9 +1,8 @@
 const express = require('express');
+const router = express.Router();
 const { body, param, validationResult } = require('express-validator');
 const db = require('../services/db');
 const authMiddleware = require('../middleware/auth');
-
-const router = express.Router();
 
 // Применяем middleware аутентификации ко всем маршрутам
 router.use(authMiddleware);
@@ -43,7 +42,7 @@ router.get('/:defectId/comments', [
     
     const comments = result.rows.map(comment => ({
       id: comment.id,
-      content: comment.content,
+      text: comment.text,
       user: {
         id: comment.user_id,
         name: comment.user_name,
@@ -71,7 +70,7 @@ router.get('/:defectId/comments', [
  */
 router.post('/:defectId/comments', [
   param('defectId').isInt().withMessage('ID дефекта должен быть целым числом'),
-  body('content')
+  body('text')
     .notEmpty().withMessage('Комментарий не может быть пустым')
     .trim()
 ], async (req, res, next) => {
@@ -86,48 +85,96 @@ router.post('/:defectId/comments', [
       });
     }
     
-    const { defectId } = req.params;
-    const { content } = req.body;
+    // Исправлено: используем правильное имя параметра
+    const defectId = req.params.defectId;
     
-    // Проверка существования дефекта
-    const defectExists = await db.query('SELECT * FROM defects WHERE id = $1', [defectId]);
-    
-    if (defectExists.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Дефект не найден' 
+    // Проверяем существование дефекта
+    const defectResult = await db.query('SELECT * FROM defects WHERE id = $1', [defectId]);
+    if (defectResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Дефект не найден'
       });
     }
     
-    // Добавление комментария
-    const result = await db.query(`
-      INSERT INTO comments (defect_id, user_id, content, created_at) 
-      VALUES ($1, $2, $3, CURRENT_TIMESTAMP) 
-      RETURNING id, defect_id, user_id, content, created_at
-    `, [defectId, req.user.id, content]);
+    // Получаем ID пользователя из токена
+    const userId = req.user.id;
     
-    const comment = result.rows[0];
+    // Определяем существующие поля таблицы comments
+    const columnsResult = await db.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'comments'
+    `);
     
-    // Запись в историю дефекта
-    await db.query(`
-      INSERT INTO defect_history (defect_id, user_id, field_name, new_value, created_at) 
-      VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-    `, [defectId, req.user.id, 'комментарий', 'Добавлен новый комментарий']);
+    // Получаем имена всех полей
+    const columnNames = columnsResult.rows.map(row => row.column_name);
+    console.log('Доступные поля в таблице comments:', columnNames);
+    
+    // Текст комментария из запроса
+    const commentText = req.body.text;
+    
+    let insertQuery;
+    let queryParams;
+    
+    // Адаптивное формирование запроса в зависимости от существующих полей
+    if (columnNames.includes('text')) {
+      insertQuery = `
+        INSERT INTO comments (defect_id, user_id, text) 
+        VALUES ($1, $2, $3) RETURNING *
+      `;
+      queryParams = [defectId, userId, commentText];
+    } else if (columnNames.includes('content')) {
+      insertQuery = `
+        INSERT INTO comments (defect_id, user_id, content) 
+        VALUES ($1, $2, $3) RETURNING *
+      `;
+      queryParams = [defectId, userId, commentText];
+    } else if (columnNames.includes('comment_text')) {
+      insertQuery = `
+        INSERT INTO comments (defect_id, user_id, comment_text) 
+        VALUES ($1, $2, $3) RETURNING *
+      `;
+      queryParams = [defectId, userId, commentText];
+    } else if (columnNames.includes('message')) {
+      insertQuery = `
+        INSERT INTO comments (defect_id, user_id, message) 
+        VALUES ($1, $2, $3) RETURNING *
+      `;
+      queryParams = [defectId, userId, commentText];
+    } else {
+      // Если нет подходящего поля, вернуть ошибку
+      return res.status(500).json({
+        success: false,
+        message: 'Структура таблицы comments не содержит поле для хранения текста комментария'
+      });
+    }
+    
+    // Выполняем запрос на вставку комментария
+    const result = await db.query(insertQuery, queryParams);
+    
+    // Получаем данные пользователя
+    const userResult = await db.query('SELECT id, email FROM users WHERE id = $1', [userId]);
+    
+    // Формируем ответ с данными
+    const comment = {
+      ...result.rows[0],
+      user: userResult.rows[0] || { id: userId }
+    };
     
     res.status(201).json({
       success: true,
-      message: 'Комментарий успешно добавлен',
-      comment: {
-        id: comment.id,
-        defectId: comment.defect_id,
-        userId: comment.user_id,
-        content: comment.content,
-        createdAt: comment.created_at
-      }
+      message: 'Комментарий добавлен',
+      comment
     });
     
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error('Ошибка при добавлении комментария:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Внутренняя ошибка сервера',
+      error: error.message
+    });
   }
 });
 
@@ -139,7 +186,7 @@ router.post('/:defectId/comments', [
 router.put('/:defectId/comments/:commentId', [
   param('defectId').isInt().withMessage('ID дефекта должен быть целым числом'),
   param('commentId').isInt().withMessage('ID комментария должен быть целым числом'),
-  body('content')
+  body('text')
     .notEmpty().withMessage('Комментарий не может быть пустым')
     .trim()
 ], async (req, res, next) => {
@@ -155,7 +202,7 @@ router.put('/:defectId/comments/:commentId', [
     }
     
     const { defectId, commentId } = req.params;
-    const { content } = req.body;
+    const { text } = req.body;
     
     // Проверка существования комментария
     const commentExists = await db.query(
@@ -183,10 +230,10 @@ router.put('/:defectId/comments/:commentId', [
     // Обновление комментария
     const result = await db.query(`
       UPDATE comments 
-      SET content = $1, updated_at = CURRENT_TIMESTAMP 
+      SET text = $1, updated_at = CURRENT_TIMESTAMP 
       WHERE id = $2 
-      RETURNING id, defect_id, user_id, content, created_at, updated_at
-    `, [content, commentId]);
+      RETURNING id, defect_id, user_id, text, created_at, updated_at
+    `, [text, commentId]);
     
     const updatedComment = result.rows[0];
     
@@ -197,7 +244,7 @@ router.put('/:defectId/comments/:commentId', [
         id: updatedComment.id,
         defectId: updatedComment.defect_id,
         userId: updatedComment.user_id,
-        content: updatedComment.content,
+        text: updatedComment.text,
         createdAt: updatedComment.created_at,
         updatedAt: updatedComment.updated_at
       }

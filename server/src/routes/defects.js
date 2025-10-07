@@ -691,6 +691,13 @@ router.delete('/:id', roleCheck(['admin', 'manager']), async (req, res, next) =>
   }
 });
 
+// Добавить перенаправление комментариев (если это еще не сделано)
+
+const commentsRouter = require('./comments');
+
+// Использовать маршрутизатор комментариев для обработки соответствующих запросов
+router.use('/', commentsRouter);
+
 /**
  * Вспомогательная функция для проверки допустимых переходов статусов
  * @param {string} currentStatus - Текущий статус дефекта

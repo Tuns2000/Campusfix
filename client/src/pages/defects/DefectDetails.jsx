@@ -49,7 +49,7 @@ import {
   fetchDefectById, 
   resetCurrentDefect, 
   deleteDefect, 
-  addDefectComment,
+  addComment,  // Заменено с addDefectComment на addComment
   updateDefect
 } from '../../lib/slices/defectsSlice';
 import LoadingScreen from '../../components/common/LoadingScreen';
@@ -167,6 +167,7 @@ const AttachmentsTab = ({ attachments = [] }) => {
 const CommentsTab = ({ comments = [], defectId, onAddComment }) => {
   const theme = useTheme();
   const [commentText, setCommentText] = useState('');
+  const [commentError, setCommentError] = useState('');
   const { user } = useSelector((state) => state.auth);
   
   const handleSubmit = (e) => {
@@ -192,6 +193,8 @@ const CommentsTab = ({ comments = [], defectId, onAddComment }) => {
           onChange={(e) => setCommentText(e.target.value)}
           variant="outlined"
           sx={{ mb: 2 }}
+          error={!!commentError}
+          helperText={commentError}
         />
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button
@@ -345,9 +348,10 @@ const DefectDetails = () => {
   
   // Обработчик добавления комментария
   const handleAddComment = (commentData) => {
-    dispatch(addDefectComment({
+    // Для совместимости с API-запросом создадим нужную структуру данных
+    dispatch(addComment({
       defectId: id,
-      comment: commentData
+      text: commentData.text
     }));
   };
   
@@ -677,7 +681,7 @@ const DefectDetails = () => {
               <CommentsTab 
                 comments={currentDefect.comments || []} 
                 defectId={currentDefect.id}
-                onAddComment={handleAddComment}
+                onAddComment={(data) => handleAddComment({ text: data.text })}
               />
             </Card>
           </Grid>
