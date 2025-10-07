@@ -187,8 +187,17 @@ export const attachmentsApi = {
 export const usersApi = {
   getAll: () => axiosInstance.get('/users'),
   getById: (id) => axiosInstance.get(`/users/${id}`),
-  update: (id, data) => axiosInstance.put(`/users/${id}`, data),
-  delete: (id) => axiosInstance.delete(`/users/${id}`)
+  create: (userData) => axiosInstance.post('/users', userData),
+  update: (id, userData) => axiosInstance.put(`/users/${id}`, userData),
+  delete: (id) => axiosInstance.delete(`/users/${id}`),
+  
+  // Новые методы для работы с профилем
+  getProfile: () => axiosInstance.get('/users/profile'),
+  updateProfile: (profileData) => axiosInstance.put('/users/profile', profileData),
+  changePassword: (passwordData) => axiosInstance.put('/users/change-password', passwordData),
+  uploadAvatar: (formData) => axiosInstance.post('/users/avatar', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 };
 
 // Обновленные функции для работы с отчетами

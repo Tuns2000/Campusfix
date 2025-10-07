@@ -3,6 +3,14 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { checkAuth, checkTokenValidity } from './lib/slices/authSlice';
 import api from './lib/api';
+import { ThemeProvider } from '@mui/material/styles';
+import { CssBaseline } from '@mui/material';
+import { LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { ru } from 'date-fns/locale';
+
+// Импорт тем и компонентов
+import theme from './styles/theme';
 
 // Импорт компонентов макета
 import MainLayout from './components/layouts/MainLayout';
@@ -17,7 +25,9 @@ import ProjectForm from './pages/projects/ProjectForm';
 import DefectList from './pages/defects/DefectList';
 import DefectDetails from './pages/defects/DefectDetails';
 import DefectForm from './pages/defects/DefectForm';
+import ProfilePage from './pages/profile/ProfilePage';  // Добавляем импорт компонента профиля
 import NotFound from './pages/NotFound';
+import LoadingScreen from './components/common/LoadingScreen';
 
 // Защищенный маршрут
 const ProtectedRoute = ({ children, roles = [] }) => {
@@ -40,7 +50,7 @@ const ProtectedRoute = ({ children, roles = [] }) => {
 
 function App() {
   const dispatch = useDispatch();
-  const { isAuthenticated } = useSelector(state => state.auth);
+  const { isAuthenticated, isLoading } = useSelector(state => state.auth);
   
   // Добавляем эффект для проверки токена при загрузке
   useEffect(() => {
@@ -65,48 +75,41 @@ function App() {
     }
   }, [dispatch, isAuthenticated]);
   
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
   return (
-    <Routes>
-      {/* Публичные маршруты */}
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      
-      {/* Защищенные маршруты */}
-      <Route path="/" element={
-        <ProtectedRoute>
-          <MainLayout />
-        </ProtectedRoute>
-      }>
-        <Route index element={<Dashboard />} />
-        
-        {/* Маршруты проектов */}
-        <Route path="projects">
-          <Route index element={<ProjectList />} />
-          <Route path=":id" element={<ProjectDetails />} />
-          <Route path="new" element={
-            <ProtectedRoute roles={['admin', 'manager']}>
-              <ProjectForm />
-            </ProtectedRoute>
-          } />
-          <Route path=":id/edit" element={
-            <ProtectedRoute roles={['admin', 'manager']}>
-              <ProjectForm />
-            </ProtectedRoute>
-          } />
-        </Route>
-        
-        {/* Маршруты дефектов */}
-        <Route path="defects">
-          <Route index element={<DefectList />} />
-          <Route path=":id" element={<DefectDetails />} />
-          <Route path="new" element={<DefectForm />} />
-          <Route path=":id/edit" element={<DefectForm />} />
-        </Route>
-      </Route>
-      
-      {/* Маршрут 404 */}
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <ThemeProvider theme={theme}>
+      <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ru}>
+        <CssBaseline />
+        <Routes>
+          {/* Публичные маршруты */}
+          <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" />} />
+          <Route path="/register" element={!isAuthenticated ? <Register /> : <Navigate to="/" />} />
+
+          {/* Защищенные маршруты */}
+          <Route
+            path="/"
+            element={isAuthenticated ? <MainLayout /> : <Navigate to="/login" />}
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="projects" element={<ProjectList />} />
+            <Route path="projects/new" element={<ProjectForm />} />
+            <Route path="projects/:id" element={<ProjectDetails />} />
+            <Route path="projects/:id/edit" element={<ProjectForm />} />
+            <Route path="defects" element={<DefectList />} />
+            <Route path="defects/new" element={<DefectForm />} />
+            <Route path="defects/:id" element={<DefectDetails />} />
+            <Route path="defects/:id/edit" element={<DefectForm />} />
+            <Route path="profile" element={<ProfilePage />} />  {/* Добавляем маршрут профиля */}
+          </Route>
+
+          {/* Маршрут "Не найдено" */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </LocalizationProvider>
+    </ThemeProvider>
   );
 }
 

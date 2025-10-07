@@ -200,7 +200,7 @@ const MainLayout = () => {
                 <ListItemIcon>
                   <PersonIcon fontSize="small" />
                 </ListItemIcon>
-                <ListItemText>Профиль</ListItemText>
+                <ListItemText primary="Профиль" />
               </MenuItem>
               <MenuItem onClick={() => {
                 handleCloseUserMenu();

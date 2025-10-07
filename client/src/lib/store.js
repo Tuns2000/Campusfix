@@ -1,14 +1,15 @@
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './slices/authSlice';
-import projectsReducer from './slices/projectsSlice';
 import defectsReducer from './slices/defectsSlice';
+import projectsReducer from './slices/projectsSlice';
+import profileReducer from './slices/profileSlice';
 
-const store = configureStore({
+export const store = configureStore({
   reducer: {
     auth: authReducer,
-    projects: projectsReducer,
     defects: defectsReducer,
-    // ... другие редьюсеры по мере добавления
+    projects: projectsReducer,
+    profile: profileReducer,
   },
 });
 
