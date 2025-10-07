@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -49,6 +49,7 @@ import {
   resetDefectMessages 
 } from '../../lib/slices/defectsSlice';
 import { fetchProjects } from '../../lib/slices/projectsSlice';
+import { fetchUsers } from '../../lib/slices/usersSlice';
 import LoadingScreen from '../../components/common/LoadingScreen';
 
 // Получение иконки для типа файла
@@ -87,7 +88,8 @@ const DefectForm = () => {
   
   const { currentDefect, loading, error, createSuccess, updateSuccess } = useSelector((state) => state.defects);
   const { projects, loading: projectsLoading } = useSelector(state => state.projects);
-  const { user } = useSelector((state) => state.auth);
+  const { users } = useSelector(state => state.users);
+  const { user: currentUser } = useSelector(state => state.auth);
   
   const isEditMode = Boolean(id);
   
@@ -102,7 +104,7 @@ const DefectForm = () => {
     priority: 'средний', // Изменено с 'medium' на русский эквивалент
     project_id: '',
     assigned_to: '',
-    reporter_id: user?.id || ''
+    reporter_id: currentUser?.id || ''
   });
   
   // Состояние для загрузки файлов
@@ -119,9 +121,13 @@ const DefectForm = () => {
   // В компонент добавляем состояние для серверных ошибок
   const [serverErrors, setServerErrors] = useState([]);
   
+  // Отфильтрованный список инженеров
+  const [engineers, setEngineers] = useState([]);
+  
   // Загрузка данных для редактирования
   useEffect(() => {
     dispatch(fetchProjects());
+    dispatch(fetchUsers());
     
     if (isEditMode) {
       dispatch(fetchDefectById(id));
@@ -145,12 +151,12 @@ const DefectForm = () => {
         priority: currentDefect.priority || 'medium',
         project_id: currentDefect.project_id || '',
         assigned_to: currentDefect.assigned_to || '',
-        reporter_id: currentDefect.reporter_id || user?.id || ''
+        reporter_id: currentDefect.reporter_id || currentUser?.id || ''
       });
       
       setCurrentAttachments(currentDefect.attachments || []);
     }
-  }, [isEditMode, currentDefect, user]);
+  }, [isEditMode, currentDefect, currentUser]);
   
   // Обработка успешного создания/редактирования
   useEffect(() => {
@@ -161,6 +167,17 @@ const DefectForm = () => {
     }
   }, [createSuccess, updateSuccess, id, navigate]);
   
+  // Фильтруем инженеров при получении списка пользователей
+  useEffect(() => {
+    if (users && users.length > 0) {
+      // Фильтруем только пользователей с ролью "engineer" или "admin"
+      const filteredEngineers = users.filter(user => 
+        user.role === 'engineer' || user.role === 'admin'
+      );
+      setEngineers(filteredEngineers);
+    }
+  }, [users]);
+
   // Обработчик изменения полей формы
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -255,9 +272,17 @@ const DefectForm = () => {
         expected_result: formData.expected_result || '',
         actual_result: formData.actual_result || '',
         project_id: parseInt(formData.project_id, 10),
-        status: 'новый',
-        priority: mapPriorityToRussian(formData.priority) || 'средний',
-        reported_by: user?.id || 3, // Явно указываем ID пользователя
+        status: formData.status || 'новый', // Используем напрямую значение из формы
+        priority: formData.priority || 'средний', // Используем напрямую значение из формы
+        reported_by: currentUser?.id || 3, // ID автора
+        assigned_to: formData.assigned_to || null, // Добавляем явное указание assigned_to
+        // Добавляем дополнительные поля для информации
+        reporter: {  // Добавляем данные об авторе
+          id: currentUser?.id,
+          first_name: currentUser?.first_name || '',
+          last_name: currentUser?.last_name || ''
+        },
+        project: projects.find(p => p.id === parseInt(formData.project_id, 10)), // Добавляем данные о проекте
         location: formData.location || ''
       };
       
@@ -443,16 +468,32 @@ const DefectForm = () => {
               {/* Назначено */}
               <Grid item xs={12} md={6}>
                 <FormControl fullWidth>
-                  <InputLabel>Назначено</InputLabel>
+                  <InputLabel id="assigned-to-label">Назначено</InputLabel>
                   <Select
+                    labelId="assigned-to-label"
+                    id="assigned-to"
                     name="assigned_to"
-                    value={formData.assigned_to}
+                    value={formData.assigned_to || ''}
                     onChange={handleChange}
                     label="Назначено"
                   >
                     <MenuItem value="">Не назначено</MenuItem>
-                    {/* В реальном приложении здесь будет список пользователей из API */}
-                    <MenuItem value={user?.id}>Мне</MenuItem>
+                    {currentUser && (
+                      <MenuItem value={currentUser.id}>
+                        Мне ({currentUser.first_name} {currentUser.last_name})
+                      </MenuItem>
+                    )}
+                    
+                    {/* Отображаем всех инженеров, кроме текущего пользователя */}
+                    {engineers
+                      .filter(engineer => engineer.id !== currentUser?.id)
+                      .map(engineer => (
+                        <MenuItem key={engineer.id} value={engineer.id}>
+                          {engineer.first_name} {engineer.last_name} 
+                          {engineer.role === 'admin' ? ' (Администратор)' : ''}
+                        </MenuItem>
+                      ))
+                    }
                   </Select>
                 </FormControl>
               </Grid>
@@ -466,7 +507,7 @@ const DefectForm = () => {
                     value={formData.reporter_id}
                     label="Автор дефекта"
                   >
-                    <MenuItem value={user?.id}>{user?.name || 'Текущий пользователь'}</MenuItem>
+                    <MenuItem value={currentUser?.id}>{currentUser?.name || 'Текущий пользователь'}</MenuItem>
                   </Select>
                   <FormHelperText>Автор дефекта задается автоматически</FormHelperText>
                 </FormControl>

@@ -111,18 +111,22 @@ const getFileIcon = (filename) => {
 // Получение статуса на русском и цвета
 const getStatusInfo = (status) => {
   switch (status) {
-    case 'new':
+    case 'новый':
       return { label: 'Новый', color: 'info' };
-    case 'in_progress':
+    case 'подтвержден':
+      return { label: 'Подтвержден', color: 'secondary' };
+    case 'в работе':
       return { label: 'В работе', color: 'warning' };
-    case 'resolved':
-      return { label: 'Решен', color: 'success' };
-    case 'closed':
+    case 'исправлен':
+      return { label: 'Исправлен', color: 'success' };
+    case 'проверен':
+      return { label: 'Проверен', color: 'primary' };
+    case 'закрыт':
       return { label: 'Закрыт', color: 'success' };
-    case 'reopened':
-      return { label: 'Переоткрыт', color: 'error' };
+    case 'отклонен':
+      return { label: 'Отклонен', color: 'error' };
     default:
-      return { label: status, color: 'default' };
+      return { label: status || 'Новый', color: 'default' };
   }
 };
 
@@ -301,10 +305,15 @@ const DefectDetails = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { currentDefect, loading, error } = useSelector((state) => state.defects);
+  const { user } = useSelector((state) => state.auth);
+  const canEditStatus = user && (user.role === 'admin' || user.role === 'engineer');
   const [tabValue, setTabValue] = useState(0);
   const [statusChangeOpen, setStatusChangeOpen] = useState(false);
   const [newStatus, setNewStatus] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [statusValue, setStatusValue] = useState('');
+  const [errorStatus, setError] = useState('');
   
   // Загрузка данных при монтировании
   useEffect(() => {
@@ -319,6 +328,7 @@ const DefectDetails = () => {
   useEffect(() => {
     if (currentDefect) {
       setNewStatus(currentDefect.status);
+      setStatusValue(currentDefect.status);
     }
   }, [currentDefect]);
   
@@ -344,18 +354,36 @@ const DefectDetails = () => {
   };
   
   // Обработчик сохранения статуса
-  const handleStatusSave = () => {
-    dispatch(updateDefect({
-      id,
-      defectData: { status: newStatus }
-    }))
-      .unwrap()
-      .then(() => {
-        setStatusChangeOpen(false);
-      })
-      .catch((error) => {
-        console.error('Ошибка при изменении статуса:', error);
+  const handleStatusSave = async () => {
+    try {
+      setSubmitting(true);
+      
+      // Проверка прав пользователя на изменение статуса
+      if (!canEditStatus) {
+        setError('У вас нет прав для изменения статуса дефекта');
+        return;
+      }
+      
+      console.log('Отправка данных об изменении статуса:', {
+        status: newStatus, // Используем newStatus вместо statusValue
       });
+      
+      await dispatch(updateDefect({ 
+        id, 
+        defectData: { 
+          status: newStatus, // Используем newStatus вместо statusValue
+        }
+      })).unwrap();
+      
+      // Исправляем здесь - используем правильное имя функции
+      setStatusChangeOpen(false);
+      
+    } catch (error) {
+      console.error('Ошибка при изменении статуса:', error.message);
+      setError(error.message || 'Не удалось изменить статус дефекта');
+    } finally {
+      setSubmitting(false);
+    }
   };
   
   // Обработчик удаления дефекта
@@ -634,7 +662,7 @@ const DefectDetails = () => {
                             Проект
                           </Typography>
                           <Typography variant="body1" fontWeight="medium">
-                            {currentDefect.project_name || 'Не указан'}
+                            {currentDefect.project ? currentDefect.project.name : 'Не указан'}
                           </Typography>
                         </Box>
                       </Box>
@@ -648,7 +676,9 @@ const DefectDetails = () => {
                             Автор
                           </Typography>
                           <Typography variant="body1" fontWeight="medium">
-                            {currentDefect.reporter_name || 'Не указан'}
+                            {currentDefect.reporter 
+                              ? `${currentDefect.reporter.first_name || ''} ${currentDefect.reporter.last_name || ''}`.trim()
+                              : 'Не указан'}
                           </Typography>
                         </Box>
                       </Box>
@@ -662,7 +692,11 @@ const DefectDetails = () => {
                             Назначен
                           </Typography>
                           <Typography variant="body1" fontWeight="medium">
-                            {currentDefect.assigned_name || 'Не назначен'}
+                            {currentDefect.assigned_to 
+                              ? (typeof currentDefect.assigned_to === 'object'
+                                ? `${currentDefect.assigned_to.first_name || ''} ${currentDefect.assigned_to.last_name || ''}`.trim()
+                                : `Пользователь #${currentDefect.assigned_to}`)
+                              : 'Не назначен'}
                           </Typography>
                         </Box>
                       </Box>
@@ -676,7 +710,9 @@ const DefectDetails = () => {
                             Создан
                           </Typography>
                           <Typography variant="body1" fontWeight="medium">
-                            {formatDate(currentDefect.created_at)}
+                            {currentDefect.created_at 
+                              ? new Date(currentDefect.created_at).toLocaleString('ru-RU')
+                              : 'Дата не указана'}
                           </Typography>
                         </Box>
                       </Box>
@@ -690,7 +726,9 @@ const DefectDetails = () => {
                             Обновлен
                           </Typography>
                           <Typography variant="body1" fontWeight="medium">
-                            {formatDate(currentDefect.updated_at)}
+                            {currentDefect.updated_at 
+                              ? new Date(currentDefect.updated_at).toLocaleString('ru-RU')
+                              : 'Дата не указана'}
                           </Typography>
                         </Box>
                       </Box>
@@ -742,11 +780,13 @@ const DefectDetails = () => {
               fullWidth
               SelectProps={{ native: true }}
             >
-              <option value="new">Новый</option>
-              <option value="in_progress">В работе</option>
-              <option value="resolved">Решен</option>
-              <option value="closed">Закрыт</option>
-              <option value="reopened">Переоткрыт</option>
+              <option value="новый">Новый</option>
+              <option value="подтвержден">Подтвержден</option>
+              <option value="в работе">В работе</option>
+              <option value="исправлен">Исправлен</option>
+              <option value="проверен">Проверен</option>
+              <option value="закрыт">Закрыт</option>
+              <option value="отклонен">Отклонен</option>
             </TextField>
           </Box>
         </DialogContent>
@@ -759,8 +799,9 @@ const DefectDetails = () => {
             color="primary" 
             onClick={handleStatusSave}
             startIcon={<SaveIcon />}
+            disabled={submitting}
           >
-            Сохранить
+            {submitting ? 'Сохранение...' : 'Сохранить'}
           </Button>
         </DialogActions>
       </Dialog>

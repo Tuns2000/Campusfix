@@ -150,142 +150,79 @@ router.get('/', authMiddleware, async (req, res, next) => {
  * @desc Получение детальной информации о дефекте, включая вложения и комментарии
  * @access Private (все авторизованные пользователи)
  */
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const { id } = req.params;
+    const defectId = parseInt(req.params.id);
     
-    // Получение информации о дефекте
+    if (isNaN(defectId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Неверный формат ID'
+      });
+    }
+    
+    // Получаем базовую информацию о дефекте
     const defectResult = await db.query(`
       SELECT d.*, 
-        p.name as project_name, 
-        ps.name as stage_name,
-        u1.first_name || ' ' || u1.last_name as reported_by_name,
-        u1.email as reported_by_email,
-        u2.first_name || ' ' || u2.last_name as assigned_to_name,
-        u2.email as assigned_to_email
+             p.name as project_name,
+             u1.first_name as reporter_first_name, 
+             u1.last_name as reporter_last_name,
+             u2.first_name as assignee_first_name, 
+             u2.last_name as assignee_last_name
       FROM defects d
       LEFT JOIN projects p ON d.project_id = p.id
-      LEFT JOIN project_stages ps ON d.stage_id = ps.id
       LEFT JOIN users u1 ON d.reported_by = u1.id
       LEFT JOIN users u2 ON d.assigned_to = u2.id
       WHERE d.id = $1
-    `, [id]);
+    `, [defectId]);
     
     if (defectResult.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Дефект не найден' 
+      return res.status(404).json({
+        success: false,
+        message: 'Дефект не найден'
       });
     }
     
     const defect = defectResult.rows[0];
     
-    // Получение вложений дефекта
-    const attachmentsResult = await db.query(`
-      SELECT a.*, 
-        u.first_name || ' ' || u.last_name as uploaded_by_name
-      FROM attachments a
-      LEFT JOIN users u ON a.uploaded_by = u.id
-      WHERE a.defect_id = $1
-      ORDER BY a.created_at DESC
-    `, [id]);
-    
-    // Получение комментариев к дефекту
-    const commentsResult = await db.query(`
-      SELECT c.*, 
-        u.first_name || ' ' || u.last_name as user_name,
-        u.email as user_email
-      FROM comments c
-      LEFT JOIN users u ON c.user_id = u.id
-      WHERE c.defect_id = $1
-      ORDER BY c.created_at DESC
-    `, [id]);
-    
-    // Получение истории изменений дефекта
-    const historyResult = await db.query(`
-      SELECT h.*, 
-        u.first_name || ' ' || u.last_name as user_name
-      FROM defect_history h
-      LEFT JOIN users u ON h.user_id = u.id
-      WHERE h.defect_id = $1
-      ORDER BY h.created_at DESC
-    `, [id]);
-    
-    // Форматирование данных для ответа
-    const formattedDefect = {
-      id: defect.id,
-      title: defect.title,
-      description: defect.description,
-      status: defect.status,
-      priority: defect.priority,
+    // Формируем объект с полной информацией
+    const fullDefect = {
+      ...defect,
       project: {
         id: defect.project_id,
         name: defect.project_name
       },
-      stage: defect.stage_id ? {
-        id: defect.stage_id,
-        name: defect.stage_name
-      } : null,
-      reportedBy: {
+      reporter: {
         id: defect.reported_by,
-        name: defect.reported_by_name,
-        email: defect.reported_by_email
+        first_name: defect.reporter_first_name,
+        last_name: defect.reporter_last_name
       },
-      assignedTo: defect.assigned_to ? {
+      assigned_to: defect.assigned_to ? {
         id: defect.assigned_to,
-        name: defect.assigned_to_name,
-        email: defect.assigned_to_email
-      } : null,
-      location: defect.location,
-      dueDate: defect.due_date,
-      createdAt: defect.created_at,
-      updatedAt: defect.updated_at,
-      closedAt: defect.closed_at,
-      attachments: attachmentsResult.rows.map(attachment => ({
-        id: attachment.id,
-        fileName: attachment.file_name,
-        filePath: attachment.file_path,
-        fileType: attachment.file_type,
-        fileSize: attachment.file_size,
-        uploadedBy: {
-          id: attachment.uploaded_by,
-          name: attachment.uploaded_by_name
-        },
-        createdAt: attachment.created_at
-      })),
-      comments: commentsResult.rows.map(comment => ({
-        id: comment.id,
-        // Было неправильное имя поля:
-        text: comment.text,
-        
-        user: {
-          id: comment.user_id,
-          name: comment.user_name,
-          email: comment.user_email
-        },
-        createdAt: comment.created_at,
-        updatedAt: comment.updated_at
-      })),
-      history: historyResult.rows.map(record => ({
-        id: record.id,
-        fieldName: record.field_name,
-        oldValue: record.old_value,
-        newValue: record.new_value,
-        user: {
-          id: record.user_id,
-          name: record.user_name
-        },
-        createdAt: record.created_at
-      }))
+        first_name: defect.assignee_first_name,
+        last_name: defect.assignee_last_name
+      } : null
     };
     
+    // Удаляем избыточные поля
+    delete fullDefect.project_name;
+    delete fullDefect.reporter_first_name;
+    delete fullDefect.reporter_last_name;
+    delete fullDefect.assignee_first_name;
+    delete fullDefect.assignee_last_name;
+    
+    // Возвращаем полные данные
     res.json({
       success: true,
-      defect: formattedDefect
+      defect: fullDefect
     });
     
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error('Ошибка при получении дефекта:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Внутренняя ошибка сервера'
+    });
   }
 });
 
@@ -294,104 +231,87 @@ router.get('/:id', async (req, res, next) => {
  * @desc Создание нового дефекта
  * @access Private (все авторизованные пользователи)
  */
-router.post('/', authMiddleware, async (req, res, next) => {
+router.post('/', authMiddleware, async (req, res) => {
   try {
-    console.log('Полученные данные:', req.body);
+    // Получаем данные из запроса
+    const { 
+      title, 
+      description, 
+      project_id, 
+      status, 
+      priority,
+      reported_by,
+      assigned_to,
+      steps_to_reproduce,
+      expected_result,
+      actual_result,
+      location
+    } = req.body;
     
-    // Проверка существования проекта
-    const projectResult = await db.query('SELECT * FROM projects WHERE id = $1', [req.body.project_id]);
-    const projects = projectResult.rows;
+    console.log('Получены данные для создания дефекта:', req.body);
     
-    if (projects.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Проект не найден'
-      });
+    // Создаем дефект
+    const result = await db.query(`
+      INSERT INTO defects 
+      (title, description, project_id, status, priority, reported_by, assigned_to, 
+       steps_to_reproduce, expected_result, actual_result, location)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *
+    `, [
+      title, 
+      description, 
+      project_id, 
+      status || 'новый', 
+      priority || 'средний', 
+      reported_by || req.user.id,
+      assigned_to || null,
+      steps_to_reproduce || '',
+      expected_result || '',
+      actual_result || '',
+      location || ''
+    ]);
+    
+    const defect = result.rows[0];
+    
+    // Загружаем дополнительные данные
+    // 1. Информация о проекте
+    const projectResult = await db.query('SELECT id, name FROM projects WHERE id = $1', [defect.project_id]);
+    
+    // 2. Информация об авторе
+    const reporterResult = await db.query(
+      'SELECT id, first_name, last_name FROM users WHERE id = $1', 
+      [defect.reported_by]
+    );
+    
+    // 3. Информация о назначенном пользователе (если есть)
+    let assignedToResult = { rows: [] };
+    if (defect.assigned_to) {
+      assignedToResult = await db.query(
+        'SELECT id, first_name, last_name FROM users WHERE id = $1', 
+        [defect.assigned_to]
+      );
     }
     
-    // Проверка обязательных полей
-    if (!req.body.title || !req.body.description) {
-      return res.status(400).json({
-        success: false,
-        message: 'Название и описание дефекта обязательны'
-      });
-    }
-    
-    // Проверка и нормализация данных
-    const defectData = {
-      title: req.body.title,
-      description: req.body.description,
-      project_id: req.body.project_id,
-      stage_id: req.body.stage_id || null,
-      
-      // Явная нормализация русских значений
-      status: ['новый', 'подтвержден', 'в работе', 'исправлен', 'проверен', 'закрыт', 'отклонен'].includes(req.body.status) 
-        ? req.body.status : 'новый',
-        
-      priority: ['низкий', 'средний', 'высокий', 'критический'].includes(req.body.priority) 
-        ? req.body.priority : 'средний',
-      
-      // Явно указываем reported_by, гарантируем не-null значение
-      reported_by: req.body.reported_by || req.user.id,
-      
-      assigned_to: req.body.assigned_to || null,
-      location: req.body.location || '',
-      steps_to_reproduce: req.body.steps_to_reproduce || '',
-      expected_result: req.body.expected_result || '',
-      actual_result: req.body.actual_result || ''
+    // Формируем ответ с полными данными
+    const responseDefect = {
+      ...defect,
+      project: projectResult.rows.length > 0 ? projectResult.rows[0] : null,
+      reporter: reporterResult.rows.length > 0 ? reporterResult.rows[0] : null,
+      assigned_to: assignedToResult.rows.length > 0 ? assignedToResult.rows[0] : null
     };
     
-    console.log('Нормализованные данные для вставки:', defectData);
-    console.log('Priority type:', typeof defectData.priority, 'value:', defectData.priority);
-    console.log('Reported by:', defectData.reported_by);
+    res.status(201).json({
+      success: true,
+      message: 'Дефект успешно создан',
+      defect: responseDefect
+    });
     
-    // SQL-запрос для вставки
-    const insertQuery = `
-      INSERT INTO defects (
-        title, description, project_id, stage_id, status, priority, 
-        reported_by, assigned_to, location, steps_to_reproduce, expected_result, actual_result
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      RETURNING *
-    `;
-    
-    const values = [
-      defectData.title,
-      defectData.description,
-      defectData.project_id,
-      defectData.stage_id,
-      defectData.status,
-      defectData.priority,
-      defectData.reported_by,
-      defectData.assigned_to,
-      defectData.location,
-      defectData.steps_to_reproduce,
-      defectData.expected_result,
-      defectData.actual_result
-    ];
-    
-    // Выполнение запроса с обработкой ошибок
-    try {
-      const insertResult = await db.query(insertQuery, values);
-      const newDefect = insertResult.rows[0];
-      
-      res.status(201).json({
-        success: true,
-        message: 'Дефект успешно создан',
-        defect: newDefect
-      });
-    } catch (dbError) {
-      console.error('Ошибка выполнения SQL:', dbError);
-      console.error('Данные для вставки:', values);
-      
-      res.status(500).json({
-        success: false,
-        message: 'Ошибка при создании дефекта',
-        details: dbError.message
-      });
-    }
   } catch (error) {
-    console.error('Общая ошибка:', error);
-    next(error);
+    console.error('Ошибка при создании дефекта:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Внутренняя ошибка сервера при создании дефекта'
+    });
   }
 });
 
@@ -421,11 +341,12 @@ router.put('/:id', [
     .optional()
     .isIn(['низкий', 'средний', 'высокий', 'критический']).withMessage('Некорректный приоритет'),
   
-  body('stageId')
+  // Исправляем имена полей - заменяем camelCase на snake_case
+  body('stage_id')  // Было stageId
     .optional()
     .isInt().withMessage('ID этапа должен быть целым числом'),
   
-  body('assignedTo')
+  body('assigned_to')  // Было assignedTo
     .optional()
     .isInt().withMessage('ID исполнителя должен быть целым числом'),
   
@@ -433,7 +354,7 @@ router.put('/:id', [
     .optional()
     .trim(),
   
-  body('dueDate')
+  body('due_date')  // Было dueDate
     .optional()
     .isISO8601().withMessage('Неверный формат даты')
 ], async (req, res, next) => {
@@ -454,10 +375,10 @@ router.put('/:id', [
       description, 
       status, 
       priority, 
-      stageId, 
-      assignedTo, 
+      stage_id,     // Было stageId
+      assigned_to,  // Было assignedTo
       location, 
-      dueDate 
+      due_date      // Было dueDate
     } = req.body;
     
     // Получение текущих данных дефекта для сравнения и проверки прав
@@ -549,12 +470,13 @@ router.put('/:id', [
       });
     }
     
-    if (stageId !== undefined && stageId !== currentDefect.stage_id) {
+    // Обновляем проверку для stage_id
+    if (stage_id !== undefined && stage_id !== currentDefect.stage_id) {
       // Проверка существования этапа и принадлежности к тому же проекту
-      if (stageId) {
+      if (stage_id) {
         const stageExists = await db.query(
           'SELECT * FROM project_stages WHERE id = $1 AND project_id = $2',
-          [stageId, currentDefect.project_id]
+          [stage_id, currentDefect.project_id]
         );
         
         if (stageExists.rows.length === 0) {
@@ -565,19 +487,20 @@ router.put('/:id', [
         }
       }
       
-      queryParams.push(stageId);
+      queryParams.push(stage_id);
       updateFields.push(`stage_id = $${queryParams.length}`);
       historyRecords.push({
         field: 'stage_id',
         oldValue: currentDefect.stage_id,
-        newValue: stageId
+        newValue: stage_id
       });
     }
     
-    if (assignedTo !== undefined && assignedTo !== currentDefect.assigned_to) {
+    // Обновляем проверку для assigned_to
+    if (assigned_to !== undefined && assigned_to !== currentDefect.assigned_to) {
       // Проверка существования пользователя, если задан
-      if (assignedTo) {
-        const userExists = await db.query('SELECT * FROM users WHERE id = $1', [assignedTo]);
+      if (assigned_to) {
+        const userExists = await db.query('SELECT * FROM users WHERE id = $1', [assigned_to]);
         
         if (userExists.rows.length === 0) {
           return res.status(404).json({ 
@@ -587,32 +510,23 @@ router.put('/:id', [
         }
       }
       
-      queryParams.push(assignedTo);
+      queryParams.push(assigned_to);
       updateFields.push(`assigned_to = $${queryParams.length}`);
       historyRecords.push({
         field: 'assigned_to',
         oldValue: currentDefect.assigned_to,
-        newValue: assignedTo
+        newValue: assigned_to
       });
     }
     
-    if (location !== undefined && location !== currentDefect.location) {
-      queryParams.push(location);
-      updateFields.push(`location = $${queryParams.length}`);
-      historyRecords.push({
-        field: 'location',
-        oldValue: currentDefect.location,
-        newValue: location
-      });
-    }
-    
-    if (dueDate !== undefined && dueDate !== currentDefect.due_date) {
-      queryParams.push(dueDate);
+    // Обновляем проверку для due_date
+    if (due_date !== undefined && due_date !== currentDefect.due_date) {
+      queryParams.push(due_date);
       updateFields.push(`due_date = $${queryParams.length}`);
       historyRecords.push({
         field: 'due_date',
         oldValue: currentDefect.due_date,
-        newValue: dueDate
+        newValue: due_date
       });
     }
     
