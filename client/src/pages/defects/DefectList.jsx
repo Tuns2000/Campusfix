@@ -73,15 +73,28 @@ const getStatusInfo = (status) => {
 
 // Получение приоритета на русском и цвета
 const getPriorityInfo = (priority) => {
-  switch (priority) {
-    case 'high':
-      return { label: 'Высокий', color: 'error' };
-    case 'medium':
-      return { label: 'Средний', color: 'warning' };
-    case 'low':
-      return { label: 'Низкий', color: 'success' };
-    default:
-      return { label: priority, color: 'default' };
+  // Обрабатываем английские названия приоритетов
+  if (priority === 'high' || priority === 'высокий') {
+    return { label: 'Высокий', color: 'error' };
+  } else if (priority === 'medium' || priority === 'средний') {
+    return { label: 'Средний', color: 'warning' };
+  } else if (priority === 'low' || priority === 'низкий') {
+    return { label: 'Низкий', color: 'info' };
+  } else if (priority === 'critical' || priority === 'критический') {
+    return { label: 'Критический', color: 'error' };
+  }
+  
+  // Возвращаем значение по умолчанию
+  return { label: priority || 'Неизвестно', color: 'default' };
+};
+
+const getPriorityColor = (priority) => {
+  switch(priority) {
+    case 'низкий': return 'info';
+    case 'средний': return 'warning';
+    case 'высокий': return 'error';
+    case 'критический': return 'error';
+    default: return 'default';
   }
 };
 
@@ -230,6 +243,55 @@ const DefectList = () => {
         defect.description.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : defects;
+  
+  // Загрузка дефектов с обработкой ошибок и повторными попытками
+  useEffect(() => {
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    const fetchDefectsWithRetry = async () => {
+      try {
+        dispatch(fetchDefects(filters));
+      } catch (err) {
+        if (retryCount < maxRetries) {
+          retryCount++;
+          console.log(`Повторная попытка загрузки дефектов (${retryCount}/${maxRetries})...`);
+          setTimeout(fetchDefectsWithRetry, 1000 * retryCount);
+        }
+      }
+    };
+    
+    fetchDefectsWithRetry();
+  }, [dispatch, filters]);
+  
+  // Отображение карточки с ошибкой и кнопкой повторной загрузки
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Card 
+          sx={{ 
+            p: 3, 
+            borderRadius: 2, 
+            borderLeft: `4px solid ${theme.palette.error.main}`,
+            bgcolor: alpha(theme.palette.error.main, 0.1),
+          }}
+        >
+          <Typography variant="h6" color="error" gutterBottom>
+            Ошибка загрузки дефектов
+          </Typography>
+          <Typography color="error.dark" paragraph>
+            {error}
+          </Typography>
+          <Button 
+            variant="contained"
+            onClick={() => dispatch(fetchDefects(filters))}
+          >
+            Повторить загрузку
+          </Button>
+        </Card>
+      </Box>
+    );
+  }
   
   if (loading && defects.length === 0) {
     return <LoadingScreen />;
@@ -491,9 +553,9 @@ const DefectList = () => {
                               size="small" 
                             />
                             <Chip 
-                              label={priorityInfo.label} 
-                              color={priorityInfo.color} 
-                              size="small" 
+                              label={getPriorityInfo(defect.priority).label} 
+                              color={getPriorityColor(defect.priority)}
+                              size="small"
                               variant="outlined"
                             />
                             <IconButton 

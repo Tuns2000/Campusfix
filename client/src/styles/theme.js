@@ -32,6 +32,32 @@ const theme = createTheme({
       default: '#f5f5f5',
       paper: '#ffffff',
     },
+    priority: {
+      'низкий': {
+        main: '#2196f3', // синий
+        light: '#e3f2fd',
+        dark: '#1565c0',
+        contrastText: '#fff'
+      },
+      'средний': {
+        main: '#ff9800', // оранжевый
+        light: '#fff3e0',
+        dark: '#e65100',
+        contrastText: '#fff'
+      },
+      'высокий': {
+        main: '#f44336', // красный
+        light: '#ffebee',
+        dark: '#b71c1c',
+        contrastText: '#fff'
+      },
+      'критический': {
+        main: '#7b1fa2', // фиолетовый
+        light: '#f3e5f5',
+        dark: '#4a148c',
+        contrastText: '#fff'
+      }
+    }
   },
   typography: {
     fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',

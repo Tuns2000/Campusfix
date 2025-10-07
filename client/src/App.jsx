@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { checkAuth } from './lib/slices/authSlice';
+import { checkAuth, checkTokenValidity } from './lib/slices/authSlice';
+import api from './lib/api';
 
 // Импорт компонентов макета
 import MainLayout from './components/layouts/MainLayout';
@@ -39,10 +40,30 @@ const ProtectedRoute = ({ children, roles = [] }) => {
 
 function App() {
   const dispatch = useDispatch();
+  const { isAuthenticated } = useSelector(state => state.auth);
+  
+  // Добавляем эффект для проверки токена при загрузке
+  useEffect(() => {
+    // Проверка наличия токена
+    const token = localStorage.getItem('token');
+    
+    if (token) {
+      // Устанавливаем токен в заголовки запросов
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      // Можно также добавить проверку валидности токена на сервере
+      dispatch(checkTokenValidity());
+    }
+  }, [dispatch]);
   
   useEffect(() => {
-    dispatch(checkAuth());
-  }, [dispatch]);
+    // Важно: запускаем проверку аутентификации при загрузке приложения
+    const token = localStorage.getItem('token');
+    if (token && !isAuthenticated) {
+      console.log('Проверка аутентификации при загрузке приложения...');
+      dispatch(checkAuth());
+    }
+  }, [dispatch, isAuthenticated]);
   
   return (
     <Routes>

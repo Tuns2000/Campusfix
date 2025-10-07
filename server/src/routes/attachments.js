@@ -272,6 +272,79 @@ router.post('/defects/:defectId/attachments', [
 });
 
 /**
+ * @route POST /api/defects/:id/attachments
+ * @desc Загрузка нескольких файлов к дефекту
+ * @access Private (все авторизованные пользователи)
+ */
+router.post('/defects/:id/attachments', authMiddleware, upload.array('files'), async (req, res, next) => {
+  try {
+    const defectId = parseInt(req.params.id, 10);
+    
+    // Проверяем, существует ли дефект
+    const defectResult = await db.query('SELECT * FROM defects WHERE id = $1', [defectId]);
+    if (defectResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Дефект не найден'
+      });
+    }
+    
+    // Проверяем наличие файлов
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Файлы не предоставлены'
+      });
+    }
+    
+    // Обрабатываем загруженные файлы
+    const attachmentPromises = req.files.map(async (file) => {
+      // Сохраняем информацию о файле в БД
+      const result = await db.query(
+        `INSERT INTO attachments 
+         (defect_id, file_name, file_path, file_type, file_size, uploaded_by) 
+         VALUES ($1, $2, $3, $4, $5, $6) 
+         RETURNING *`,
+        [
+          defectId,
+          file.originalname,
+          file.path,
+          file.mimetype,
+          file.size,
+          req.user.id
+        ]
+      );
+      
+      return result.rows[0];
+    });
+    
+    const attachments = await Promise.all(attachmentPromises);
+    
+    return res.status(201).json({
+      success: true,
+      message: `Успешно загружено ${req.files.length} файлов`,
+      attachments
+    });
+    
+  } catch (error) {
+    console.error('Ошибка при загрузке вложений:', error);
+    
+    // Если произошла ошибка и файлы были загружены, удаляем их
+    if (req.files) {
+      for (const file of req.files) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (err) {
+          console.error('Не удалось удалить файл после ошибки:', err);
+        }
+      }
+    }
+    
+    next(error);
+  }
+});
+
+/**
  * @route DELETE /api/attachments/:id
  * @desc Удаление вложения
  * @access Private (автор вложения, admin, manager)

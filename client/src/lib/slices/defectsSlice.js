@@ -30,24 +30,34 @@ export const fetchDefectById = createAsyncThunk(
   }
 );
 
+// Создание дефекта
 export const createDefect = createAsyncThunk(
   'defects/createDefect',
-  async ({ defectData, attachments }, { rejectWithValue }) => {
+  async ({ defectData, attachments = [] }, { rejectWithValue }) => {
     try {
-      // Сначала создаем дефект
-      const response = await defectsApi.create(defectData);
-      const defect = response.data.defect;
+      console.log('Отправляемые данные:', defectData);
       
-      // Если есть вложения, загружаем их
-      if (attachments && attachments.length > 0) {
-        await defectsApi.uploadAttachments(defect.id, attachments);
+      const response = await defectsApi.create(defectData);
+      const newDefect = response.data.defect;
+      
+      // Если есть вложения и дефект успешно создан, загружаем их
+      if (attachments.length > 0 && newDefect && newDefect.id) {
+        try {
+          await defectsApi.uploadAttachments(newDefect.id, attachments);
+        } catch (attachmentError) {
+          console.error('Ошибка при загрузке вложений:', attachmentError);
+          // Продолжаем даже при ошибке загрузки вложений - просто логируем её
+          // и не прерываем выполнение, так как основной дефект уже создан
+        }
       }
       
-      return defect;
+      return newDefect;
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || 'Не удалось создать дефект'
-      );
+      console.error('Ошибка при создании дефекта:', error.response?.data || error);
+      return rejectWithValue(error.response?.data || {
+        success: false,
+        message: error.message || 'Не удалось создать дефект'
+      });
     }
   }
 );
@@ -194,8 +204,9 @@ const defectsSlice = createSlice({
       })
       .addCase(createDefect.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
-        state.createSuccess = false;
+        state.error = action.payload || { 
+          message: 'Произошла ошибка при создании дефекта'
+        };
       })
       
       // updateDefect

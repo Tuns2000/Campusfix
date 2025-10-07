@@ -28,7 +28,8 @@ import {
   DialogContent,
   DialogTitle,
   useTheme,
-  alpha
+  alpha,
+  Alert
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -38,7 +39,8 @@ import {
   Delete as DeleteIcon,
   InsertPhoto as ImageIcon,
   PictureAsPdf as PdfIcon,
-  Description as TextIcon
+  Description as TextIcon,
+  Error as ErrorIcon
 } from '@mui/icons-material';
 import { 
   createDefect, 
@@ -66,6 +68,17 @@ const getFileIcon = (filename) => {
   return <AttachFileIcon />;
 };
 
+// В начале файла добавить функцию преобразования приоритета
+const mapPriorityToRussian = (priority) => {
+  switch(priority) {
+    case 'low': return 'низкий';
+    case 'medium': return 'средний';
+    case 'high': return 'высокий';
+    case 'critical': return 'критический';
+    default: return priority; // Возвращаем как есть, если уже на русском
+  }
+};
+
 const DefectForm = () => {
   const theme = useTheme();
   const { id } = useParams();
@@ -73,7 +86,7 @@ const DefectForm = () => {
   const dispatch = useDispatch();
   
   const { currentDefect, loading, error, createSuccess, updateSuccess } = useSelector((state) => state.defects);
-  const { projects } = useSelector((state) => state.projects);
+  const { projects, loading: projectsLoading } = useSelector(state => state.projects);
   const { user } = useSelector((state) => state.auth);
   
   const isEditMode = Boolean(id);
@@ -85,8 +98,8 @@ const DefectForm = () => {
     steps_to_reproduce: '',
     expected_result: '',
     actual_result: '',
-    status: 'new',
-    priority: 'medium',
+    status: 'новый',  // Изменено с 'new' на русский эквивалент
+    priority: 'средний', // Изменено с 'medium' на русский эквивалент
     project_id: '',
     assigned_to: '',
     reporter_id: user?.id || ''
@@ -103,6 +116,8 @@ const DefectForm = () => {
   // Состояние ошибок валидации
   const [validationErrors, setValidationErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  // В компонент добавляем состояние для серверных ошибок
+  const [serverErrors, setServerErrors] = useState([]);
   
   // Загрузка данных для редактирования
   useEffect(() => {
@@ -226,21 +241,37 @@ const DefectForm = () => {
     return Object.keys(errors).length === 0;
   };
   
-  // Обработчик отправки формы
+  // Обновите обработчик отправки формы
   const handleSubmit = (e) => {
     e.preventDefault();
     setSubmitted(true);
     
     if (validateForm()) {
+      // Подготовка данных для отправки
+      const defectData = {
+        title: formData.title,
+        description: formData.description,
+        steps_to_reproduce: formData.steps_to_reproduce || '',
+        expected_result: formData.expected_result || '',
+        actual_result: formData.actual_result || '',
+        project_id: parseInt(formData.project_id, 10),
+        status: 'новый',
+        priority: mapPriorityToRussian(formData.priority) || 'средний',
+        reported_by: user?.id || 3, // Явно указываем ID пользователя
+        location: formData.location || ''
+      };
+      
+      console.log('Данные для отправки:', defectData);
+      
       if (isEditMode) {
         dispatch(updateDefect({ 
           id, 
-          defectData: formData, 
+          defectData, 
           attachments 
         }));
       } else {
         dispatch(createDefect({ 
-          defectData: formData, 
+          defectData, 
           attachments 
         }));
       }
@@ -255,6 +286,31 @@ const DefectForm = () => {
       navigate('/defects');
     }
   };
+  
+  // Обработка ошибок с сервера
+  useEffect(() => {
+    if (error) {
+      console.log('Серверная ошибка:', error);
+      
+      // Преобразуем ошибку в массив для отображения
+      const errorArr = [];
+      
+      if (typeof error === 'string') {
+        errorArr.push({ message: error });
+      } else if (error.message) {
+        errorArr.push({ message: error.message });
+        
+        // Добавляем детали ошибок, если они есть
+        if (error.errors && Array.isArray(error.errors)) {
+          error.errors.forEach(err => errorArr.push(err));
+        }
+      }
+      
+      setServerErrors(errorArr);
+    } else {
+      setServerErrors([]);
+    }
+  }, [error]);
   
   if (loading && isEditMode && !currentDefect) {
     return <LoadingScreen />;
@@ -284,17 +340,13 @@ const DefectForm = () => {
         
         {/* Сообщение об ошибке */}
         {error && (
-          <Card 
-            sx={{ 
-              p: 2, 
-              mb: 3, 
-              borderRadius: 2, 
-              borderLeft: `4px solid ${theme.palette.error.main}`,
-              bgcolor: alpha(theme.palette.error.main, 0.1)
-            }}
+          <Alert 
+            severity="error" 
+            sx={{ mt: 2, mb: 2 }}
           >
-            <Typography color="error">{error}</Typography>
-          </Card>
+            {typeof error === 'string' ? error : 
+             (error && error.message ? error.message : 'Произошла ошибка при создании дефекта')}
+          </Alert>
         )}
         
         {/* Форма дефекта */}
@@ -350,18 +402,22 @@ const DefectForm = () => {
               
               {/* Приоритет */}
               <Grid item xs={12} md={4}>
-                <FormControl fullWidth required>
+                <FormControl fullWidth error={submitted && !formData.priority}>
                   <InputLabel>Приоритет</InputLabel>
                   <Select
                     name="priority"
-                    value={formData.priority}
+                    value={formData.priority || ''}
                     onChange={handleChange}
                     label="Приоритет"
                   >
-                    <MenuItem value="low">Низкий</MenuItem>
-                    <MenuItem value="medium">Средний</MenuItem>
-                    <MenuItem value="high">Высокий</MenuItem>
+                    <MenuItem value="низкий">Низкий</MenuItem>
+                    <MenuItem value="средний">Средний</MenuItem>
+                    <MenuItem value="высокий">Высокий</MenuItem>
+                    <MenuItem value="критический">Критический</MenuItem>
                   </Select>
+                  {submitted && !formData.priority && (
+                    <FormHelperText>Приоритет обязателен</FormHelperText>
+                  )}
                 </FormControl>
               </Grid>
               
@@ -635,6 +691,34 @@ const DefectForm = () => {
             </Button>
           </DialogActions>
         </Dialog>
+        
+        {/* Блок для отображения ошибок валидации с сервера */}
+        {serverErrors.length > 0 && (
+          <Card sx={{ 
+            p: 2, 
+            mt: 2, 
+            borderRadius: 2, 
+            borderLeft: '4px solid #f44336',
+            bgcolor: 'rgba(244, 67, 54, 0.1)'
+          }}>
+            <Typography variant="subtitle1" color="error" gutterBottom>
+              Ошибки валидации:
+            </Typography>
+            <List dense>
+              {serverErrors.map((err, index) => (
+                <ListItem key={index}>
+                  <ListItemIcon>
+                    <ErrorIcon color="error" fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={err.message || 'Неизвестная ошибка'}
+                    secondary={err.field ? `Поле: ${err.field}` : ''}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Card>
+        )}
       </motion.div>
     </Box>
   );

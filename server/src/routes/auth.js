@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult, check } = require('express-validator');
 const db = require('../services/db');
 const config = require('../config');
+const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -358,6 +359,31 @@ router.post('/change-password', [
     
   } catch (err) {
     next(err);
+  }
+});
+
+// Добавьте эндпоинт для проверки токена
+router.get('/check', authMiddleware, async (req, res) => {
+  try {
+    // req.user должен быть установлен middleware авторизации
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Пользователь не авторизован'
+      });
+    }
+    
+    // Возвращаем данные пользователя
+    res.json({
+      success: true,
+      user: req.user
+    });
+  } catch (error) {
+    console.error('Ошибка при проверке токена:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Ошибка при проверке токена'
+    });
   }
 });
 

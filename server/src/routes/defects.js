@@ -14,9 +14,30 @@ router.use(authMiddleware);
  * @desc Получение списка дефектов с фильтрацией и сортировкой
  * @access Private (все авторизованные пользователи)
  */
-router.get('/', async (req, res, next) => {
+router.get('/', authMiddleware, async (req, res, next) => {
   try {
-    // Параметры запроса для фильтрации и пагинации
+    // Добавляем логирование
+    console.log('GET /defects запрос с параметрами:', req.query);
+    
+    // Базовый запрос
+    let query = `
+      SELECT 
+        d.*,
+        p.name as project_name,
+        s.name as stage_name
+      FROM 
+        defects d
+      LEFT JOIN 
+        projects p ON d.project_id = p.id
+      LEFT JOIN 
+        project_stages s ON d.stage_id = s.id
+      WHERE 1=1
+    `;
+    
+    // Добавляем условия фильтрации
+    const conditions = [];
+    const params = [];
+    
     const { 
       project, 
       stage, 
@@ -33,127 +54,62 @@ router.get('/', async (req, res, next) => {
     
     const offset = (page - 1) * limit;
     
-    // Формирование базового запроса
-    let queryText = `
-      SELECT d.*, 
-        p.name as project_name, 
-        ps.name as stage_name,
-        u1.first_name || ' ' || u1.last_name as reported_by_name,
-        u2.first_name || ' ' || u2.last_name as assigned_to_name
-      FROM defects d
-      LEFT JOIN projects p ON d.project_id = p.id
-      LEFT JOIN project_stages ps ON d.stage_id = ps.id
-      LEFT JOIN users u1 ON d.reported_by = u1.id
-      LEFT JOIN users u2 ON d.assigned_to = u2.id
-    `;
-    
-    const queryParams = [];
-    const conditions = [];
-    
     // Добавление фильтров
     if (project) {
-      queryParams.push(project);
-      conditions.push(`d.project_id = $${queryParams.length}`);
+      params.push(project);
+      conditions.push(`d.project_id = $${params.length}`);
     }
     
     if (stage) {
-      queryParams.push(stage);
-      conditions.push(`d.stage_id = $${queryParams.length}`);
+      params.push(stage);
+      conditions.push(`d.stage_id = $${params.length}`);
     }
     
     if (status) {
-      queryParams.push(status);
-      conditions.push(`d.status = $${queryParams.length}`);
+      params.push(status);
+      conditions.push(`d.status = $${params.length}`);
     }
     
     if (priority) {
-      queryParams.push(priority);
-      conditions.push(`d.priority = $${queryParams.length}`);
+      params.push(priority);
+      conditions.push(`d.priority = $${params.length}`);
     }
     
     if (assignedTo) {
-      queryParams.push(assignedTo);
-      conditions.push(`d.assigned_to = $${queryParams.length}`);
+      params.push(assignedTo);
+      conditions.push(`d.assigned_to = $${params.length}`);
     }
     
     if (reportedBy) {
-      queryParams.push(reportedBy);
-      conditions.push(`d.reported_by = $${queryParams.length}`);
+      params.push(reportedBy);
+      conditions.push(`d.reported_by = $${params.length}`);
     }
     
     if (search) {
-      queryParams.push(`%${search}%`);
-      conditions.push(`(d.title ILIKE $${queryParams.length} OR d.description ILIKE $${queryParams.length} OR d.location ILIKE $${queryParams.length})`);
+      params.push(`%${search}%`);
+      conditions.push(`(d.title ILIKE $${params.length} OR d.description ILIKE $${params.length} OR d.location ILIKE $${params.length})`);
     }
     
     // Добавление условий в запрос
     if (conditions.length > 0) {
-      queryText += ' WHERE ' + conditions.join(' AND ');
+      query += ' AND ' + conditions.join(' AND ');
     }
     
-    // Добавление сортировки и пагинации
-    const validSortFields = ['id', 'title', 'status', 'priority', 'created_at', 'updated_at', 'due_date'];
-    const validSortOrders = ['asc', 'desc'];
+    // Сортировка и пагинация
+    query += ' ORDER BY d.created_at DESC';
     
-    const actualSortBy = validSortFields.includes(sortBy) ? sortBy : 'created_at';
-    const actualSortOrder = validSortOrders.includes(sortOrder.toLowerCase()) ? sortOrder.toLowerCase() : 'desc';
+    // Выполняем запрос
+    const result = await db.query(query, params);
     
-    queryText += ` ORDER BY d.${actualSortBy} ${actualSortOrder}`;
-    queryText += ` LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
-    
-    queryParams.push(parseInt(limit), parseInt(offset));
-    
-    // Выполнение запроса
-    const result = await db.query(queryText, queryParams);
-    
-    // Получение общего количества дефектов (для пагинации)
-    let countQuery = 'SELECT COUNT(*) FROM defects d';
-    if (conditions.length > 0) {
-      countQuery += ' WHERE ' + conditions.join(' AND ');
-    }
-    
-    const countResult = await db.query(countQuery, queryParams.slice(0, -2));
-    const totalCount = parseInt(countResult.rows[0].count);
-    
-    // Форматирование данных для ответа
-    const defects = result.rows.map(defect => ({
-      id: defect.id,
-      title: defect.title,
-      description: defect.description,
-      status: defect.status,
-      priority: defect.priority,
-      projectId: defect.project_id,
-      projectName: defect.project_name,
-      stageId: defect.stage_id,
-      stageName: defect.stage_name,
-      reportedBy: {
-        id: defect.reported_by,
-        name: defect.reported_by_name
-      },
-      assignedTo: defect.assigned_to ? {
-        id: defect.assigned_to,
-        name: defect.assigned_to_name
-      } : null,
-      location: defect.location,
-      dueDate: defect.due_date,
-      createdAt: defect.created_at,
-      updatedAt: defect.updated_at,
-      closedAt: defect.closed_at
-    }));
-    
+    // Возвращаем результаты
     res.json({
       success: true,
-      defects,
-      pagination: {
-        total: totalCount,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(totalCount / limit)
-      }
+      defects: result.rows,
+      total: result.rows.length
     });
-    
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error('Ошибка при получении списка дефектов:', error);
+    next(error);
   }
 });
 
@@ -304,139 +260,104 @@ router.get('/:id', async (req, res, next) => {
  * @desc Создание нового дефекта
  * @access Private (все авторизованные пользователи)
  */
-router.post('/', [
-  // Валидация входных данных
-  body('title')
-    .notEmpty().withMessage('Введите название дефекта')
-    .trim()
-    .isLength({ max: 255 }).withMessage('Название не может быть длиннее 255 символов'),
-  
-  body('description')
-    .optional()
-    .trim(),
-  
-  body('projectId')
-    .notEmpty().withMessage('Укажите ID проекта')
-    .isInt().withMessage('ID проекта должен быть целым числом'),
-  
-  body('stageId')
-    .optional()
-    .isInt().withMessage('ID этапа должен быть целым числом'),
-  
-  body('priority')
-    .optional()
-    .isIn(['низкий', 'средний', 'высокий', 'критический']).withMessage('Некорректный приоритет'),
-  
-  body('location')
-    .optional()
-    .trim(),
-  
-  body('dueDate')
-    .optional()
-    .isISO8601().withMessage('Неверный формат даты')
-], async (req, res, next) => {
+router.post('/', authMiddleware, async (req, res, next) => {
   try {
-    // Проверка результатов валидации
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Ошибка валидации данных',
-        errors: errors.array() 
-      });
-    }
-    
-    const { 
-      title, 
-      description, 
-      projectId, 
-      stageId, 
-      priority = 'средний',
-      location, 
-      dueDate 
-    } = req.body;
+    console.log('Полученные данные:', req.body);
     
     // Проверка существования проекта
-    const projectExists = await db.query('SELECT * FROM projects WHERE id = $1', [projectId]);
+    const projectResult = await db.query('SELECT * FROM projects WHERE id = $1', [req.body.project_id]);
+    const projects = projectResult.rows;
     
-    if (projectExists.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Проект не найден' 
+    if (projects.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Проект не найден'
       });
     }
     
-    // Проверка существования этапа, если он указан
-    if (stageId) {
-      const stageExists = await db.query(
-        'SELECT * FROM project_stages WHERE id = $1 AND project_id = $2',
-        [stageId, projectId]
-      );
-      
-      if (stageExists.rows.length === 0) {
-        return res.status(404).json({ 
-          success: false, 
-          message: 'Этап не найден или не принадлежит указанному проекту' 
-        });
-      }
+    // Проверка обязательных полей
+    if (!req.body.title || !req.body.description) {
+      return res.status(400).json({
+        success: false,
+        message: 'Название и описание дефекта обязательны'
+      });
     }
     
-    // Создание нового дефекта
-    const result = await db.query(`
+    // Проверка и нормализация данных
+    const defectData = {
+      title: req.body.title,
+      description: req.body.description,
+      project_id: req.body.project_id,
+      stage_id: req.body.stage_id || null,
+      
+      // Явная нормализация русских значений
+      status: ['новый', 'подтвержден', 'в работе', 'исправлен', 'проверен', 'закрыт', 'отклонен'].includes(req.body.status) 
+        ? req.body.status : 'новый',
+        
+      priority: ['низкий', 'средний', 'высокий', 'критический'].includes(req.body.priority) 
+        ? req.body.priority : 'средний',
+      
+      // Явно указываем reported_by, гарантируем не-null значение
+      reported_by: req.body.reported_by || req.user.id,
+      
+      assigned_to: req.body.assigned_to || null,
+      location: req.body.location || '',
+      steps_to_reproduce: req.body.steps_to_reproduce || '',
+      expected_result: req.body.expected_result || '',
+      actual_result: req.body.actual_result || ''
+    };
+    
+    console.log('Нормализованные данные для вставки:', defectData);
+    console.log('Priority type:', typeof defectData.priority, 'value:', defectData.priority);
+    console.log('Reported by:', defectData.reported_by);
+    
+    // SQL-запрос для вставки
+    const insertQuery = `
       INSERT INTO defects (
         title, description, project_id, stage_id, status, priority, 
-        reported_by, location, due_date, created_at
-      ) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP) 
-      RETURNING id, title, description, project_id, stage_id, status, priority, 
-        reported_by, location, due_date, created_at
-    `, [
-      title, 
-      description, 
-      projectId, 
-      stageId || null, 
-      'новый', // Начальный статус
-      priority, 
-      req.user.id, // ID текущего пользователя как автора
-      location || null, 
-      dueDate || null
-    ]);
+        reported_by, assigned_to, location, steps_to_reproduce, expected_result, actual_result
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING *
+    `;
     
-    const newDefect = result.rows[0];
+    const values = [
+      defectData.title,
+      defectData.description,
+      defectData.project_id,
+      defectData.stage_id,
+      defectData.status,
+      defectData.priority,
+      defectData.reported_by,
+      defectData.assigned_to,
+      defectData.location,
+      defectData.steps_to_reproduce,
+      defectData.expected_result,
+      defectData.actual_result
+    ];
     
-    // Запись в историю изменений
-    await db.query(`
-      INSERT INTO defect_history (
-        defect_id, user_id, field_name, new_value, created_at
-      ) 
-      VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-    `, [
-      newDefect.id,
-      req.user.id,
-      'создание',
-      'Создан новый дефект'
-    ]);
-    
-    res.status(201).json({
-      success: true,
-      message: 'Дефект успешно создан',
-      defect: {
-        id: newDefect.id,
-        title: newDefect.title,
-        description: newDefect.description,
-        status: newDefect.status,
-        priority: newDefect.priority,
-        projectId: newDefect.project_id,
-        stageId: newDefect.stage_id,
-        reportedBy: req.user.id,
-        location: newDefect.location,
-        dueDate: newDefect.due_date,
-        createdAt: newDefect.created_at
-      }
-    });
-    
-  } catch (err) {
-    next(err);
+    // Выполнение запроса с обработкой ошибок
+    try {
+      const insertResult = await db.query(insertQuery, values);
+      const newDefect = insertResult.rows[0];
+      
+      res.status(201).json({
+        success: true,
+        message: 'Дефект успешно создан',
+        defect: newDefect
+      });
+    } catch (dbError) {
+      console.error('Ошибка выполнения SQL:', dbError);
+      console.error('Данные для вставки:', values);
+      
+      res.status(500).json({
+        success: false,
+        message: 'Ошибка при создании дефекта',
+        details: dbError.message
+      });
+    }
+  } catch (error) {
+    console.error('Общая ошибка:', error);
+    next(error);
   }
 });
 

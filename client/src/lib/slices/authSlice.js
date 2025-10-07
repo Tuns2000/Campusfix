@@ -1,21 +1,33 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { authApi } from '../api';
+import api from '../api';
+
+// Начальное состояние должно проверять localStorage
+const initialState = {
+  user: JSON.parse(localStorage.getItem('user')) || null,
+  token: localStorage.getItem('token') || null,
+  isAuthenticated: !!localStorage.getItem('token'),
+  loading: false,
+  error: null
+};
 
 // Асинхронные thunk-действия
 export const login = createAsyncThunk(
   'auth/login',
   async (credentials, { rejectWithValue }) => {
     try {
-      const response = await authApi.login(credentials);
-      const { token, user } = response.data;
+      const response = await api.post('/auth/login', credentials);
       
-      // Сохраняем токен в локальное хранилище
-      localStorage.setItem('token', token);
+      // Сохраняем токен и данные пользователя в localStorage
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
       
-      return { user, token };
+      // Устанавливаем токен в заголовки запросов
+      api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+      
+      return response.data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || 'Ошибка при входе в систему'
+        error.response?.data || { message: 'Ошибка авторизации' }
       );
     }
   }
@@ -26,11 +38,12 @@ export const register = createAsyncThunk(
   async (userData, { rejectWithValue }) => {
     try {
       console.log("Отправляемые данные:", userData);
-      const response = await authApi.register(userData);
+      const response = await api.post('/auth/register', userData); // Заменено на api.post
       const { token, user } = response.data;
       
       // Сохраняем токен в локальное хранилище
       localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user)); // Добавлено сохранение пользователя
       
       return { user, token };
     } catch (error) {
@@ -54,11 +67,23 @@ export const register = createAsyncThunk(
   }
 );
 
-export const logout = createAsyncThunk('auth/logout', async () => {
-  // Удаляем токен из локального хранилища
-  localStorage.removeItem('token');
-  return null;
-});
+export const logout = createAsyncThunk(
+  'auth/logout',
+  async (_, { rejectWithValue }) => {
+    try {
+      // Удаляем данные из localStorage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
+      // Удаляем токен из заголовков
+      delete api.defaults.headers.common['Authorization'];
+      
+      return { success: true };
+    } catch (error) {
+      return rejectWithValue({ message: 'Ошибка при выходе' });
+    }
+  }
+);
 
 export const checkAuth = createAsyncThunk(
   'auth/checkAuth',
@@ -66,17 +91,39 @@ export const checkAuth = createAsyncThunk(
     try {
       const token = localStorage.getItem('token');
       
-      // Если токена нет, прекращаем выполнение
       if (!token) {
         return rejectWithValue('Токен не найден');
       }
       
-      // Проверяем токен, делая запрос на получение данных текущего пользователя
-      const response = await authApi.getMe();
-      return { user: response.data.user, token };
+      // Добавьте отладочный вывод
+      console.log('Проверка токена:', token);
+      
+      // Используем другой эндпоинт для проверки (на случай если /auth/me не работает)
+      const response = await api.get('/auth/check');
+      console.log('Ответ сервера при проверке токена:', response.data);
+      
+      // Если пользователя нет в ответе, используем данные из localStorage
+      const user = response.data.user || JSON.parse(localStorage.getItem('user'));
+      
+      return { user, token };
     } catch (error) {
-      // В случае ошибки удаляем невалидный токен
+      console.error('Ошибка проверки аутентификации:', error);
+      
+      // Если сервер временно недоступен, сохраняем текущую сессию
+      if (error.code === 'ECONNABORTED' || !error.response) {
+        const user = JSON.parse(localStorage.getItem('user'));
+        const token = localStorage.getItem('token');
+        
+        // Если есть локальные данные, считаем пользователя авторизованным
+        if (user && token) {
+          return { user, token };
+        }
+      }
+      
+      // Очищаем данные только при явной ошибке аутентификации
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
       return rejectWithValue(
         error.response?.data?.message || 'Ошибка аутентификации'
       );
@@ -88,7 +135,7 @@ export const changePassword = createAsyncThunk(
   'auth/changePassword',
   async (passwordData, { rejectWithValue }) => {
     try {
-      await authApi.changePassword(passwordData);
+      await api.post('/auth/change-password', passwordData); // Заменено на api.post
       return { success: true };
     } catch (error) {
       return rejectWithValue(
@@ -98,17 +145,29 @@ export const changePassword = createAsyncThunk(
   }
 );
 
+export const checkTokenValidity = createAsyncThunk(
+  'auth/checkToken',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/auth/check');
+      return response.data;
+    } catch (error) {
+      // Если токен недействителен, очищаем localStorage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      delete api.defaults.headers.common['Authorization'];
+      
+      return rejectWithValue(
+        error.response?.data || { message: 'Сессия истекла' }
+      );
+    }
+  }
+);
+
 // Создание slice
 const authSlice = createSlice({
   name: 'auth',
-  initialState: {
-    user: null,
-    token: localStorage.getItem('token'),
-    isAuthenticated: false,
-    loading: false,
-    error: null,
-    passwordChangeSuccess: false,
-  },
+  initialState,
   reducers: {
     clearError: (state) => {
       state.error = null;
@@ -195,6 +254,22 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
         state.passwordChangeSuccess = false;
+      })
+      
+      // Обработка checkTokenValidity
+      .addCase(checkTokenValidity.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(checkTokenValidity.fulfilled, (state, action) => {
+        state.loading = false;
+        state.isAuthenticated = true;
+        state.user = action.payload.user;
+      })
+      .addCase(checkTokenValidity.rejected, (state) => {
+        state.loading = false;
+        state.isAuthenticated = false;
+        state.user = null;
+        state.token = null;
       });
   },
 });
