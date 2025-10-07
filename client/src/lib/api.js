@@ -190,8 +190,6 @@ export const usersApi = {
   create: (userData) => axiosInstance.post('/users', userData),
   update: (id, userData) => axiosInstance.put(`/users/${id}`, userData),
   delete: (id) => axiosInstance.delete(`/users/${id}`),
-  
-  // Новые методы для работы с профилем
   getProfile: () => axiosInstance.get('/users/profile'),
   updateProfile: (profileData) => axiosInstance.put('/users/profile', profileData),
   changePassword: (passwordData) => axiosInstance.put('/users/change-password', passwordData),

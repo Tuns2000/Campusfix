@@ -28,6 +28,9 @@ import DefectForm from './pages/defects/DefectForm';
 import ProfilePage from './pages/profile/ProfilePage';  // Добавляем импорт компонента профиля
 import NotFound from './pages/NotFound';
 import LoadingScreen from './components/common/LoadingScreen';
+import UserList from './pages/users/UserList';
+import UserForm from './pages/users/UserForm';
+import UserDetails from './pages/users/UserDetails';
 
 // Защищенный маршрут
 const ProtectedRoute = ({ children, roles = [] }) => {
@@ -103,6 +106,26 @@ function App() {
             <Route path="defects/:id" element={<DefectDetails />} />
             <Route path="defects/:id/edit" element={<DefectForm />} />
             <Route path="profile" element={<ProfilePage />} />  {/* Добавляем маршрут профиля */}
+            <Route path="/users" element={
+              <ProtectedRoute roles={['admin']}>
+                <UserList />
+              </ProtectedRoute>
+            } />
+            <Route path="/users/new" element={
+              <ProtectedRoute roles={['admin']}>
+                <UserForm />
+              </ProtectedRoute>
+            } />
+            <Route path="/users/:id" element={
+              <ProtectedRoute roles={['admin']}>
+                <UserDetails />
+              </ProtectedRoute>
+            } />
+            <Route path="/users/:id/edit" element={
+              <ProtectedRoute roles={['admin']}>
+                <UserForm />
+              </ProtectedRoute>
+            } />
           </Route>
 
           {/* Маршрут "Не найдено" */}
