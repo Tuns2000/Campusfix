@@ -1,120 +1,86 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+// Базовый URL API
+const API_BASE_URL = 'http://localhost:3001/api';
 
-// Создаем экземпляр axios с базовым URL
-const api = axios.create({
-  baseURL: API_URL,
+// Настройка axios
+const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 5000,
   headers: {
-    'Content-Type': 'application/json',
-  },
+    'Content-Type': 'application/json'
+  }
 });
 
-// Добавляем перехватчик для добавления токена к запросам
-api.interceptors.request.use(
-  (config) => {
+// Интерцептор для добавления токена авторизации
+axiosInstance.interceptors.request.use(
+  config => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Добавляем перехватчик для обработки ошибок
-api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  (error) => {
-    // Обработка ошибки 401 (Unauthorized)
-    if (error.response && error.response.status === 401) {
-      // Если токен истек, очищаем локальное хранилище и перезагружаем страницу
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
+  error => Promise.reject(error)
 );
 
 // API для аутентификации
 export const authApi = {
-  login: (credentials) => api.post('/auth/login', credentials),
-  register: (userData) => {
-    console.log('Регистрация пользователя с данными:', userData);
-    return api.post('/auth/register', userData);
-  },
-  getMe: () => api.get('/auth/me'),
-  changePassword: (data) => api.post('/auth/change-password', data),
-};
-
-// API для пользователей
-export const usersApi = {
-  getAll: (params) => api.get('/users', { params }),
-  getById: (id) => api.get(`/users/${id}`),
-  create: (userData) => api.post('/users', userData),
-  update: (id, userData) => api.put(`/users/${id}`, userData),
-  delete: (id) => api.delete(`/users/${id}`),
+  login: (credentials) => axiosInstance.post('/auth/login', credentials),
+  register: (userData) => axiosInstance.post('/auth/register', userData),
+  checkAuth: () => axiosInstance.get('/auth/me'),
+  logout: () => axiosInstance.post('/auth/logout')
 };
 
 // API для проектов
 export const projectsApi = {
-  getAll: (params) => api.get('/projects', { params }),
-  getById: (id) => api.get(`/projects/${id}`),
-  create: (projectData) => api.post('/projects', projectData),
-  update: (id, projectData) => api.put(`/projects/${id}`, projectData),
-  delete: (id) => api.delete(`/projects/${id}`),
-  
-  // API для этапов проекта
-  getStages: (projectId) => api.get(`/projects/${projectId}/stages`),
-  getStageById: (projectId, stageId) => api.get(`/projects/${projectId}/stages/${stageId}`),
-  createStage: (projectId, stageData) => api.post(`/projects/${projectId}/stages`, stageData),
-  updateStage: (projectId, stageId, stageData) => api.put(`/projects/${projectId}/stages/${stageId}`, stageData),
-  deleteStage: (projectId, stageId) => api.delete(`/projects/${projectId}/stages/${stageId}`),
+  getAll: (filters = {}) => axiosInstance.get('/projects', { params: filters }),
+  getById: (id) => axiosInstance.get(`/projects/${id}`),
+  create: (data) => axiosInstance.post('/projects', data),
+  update: (id, data) => axiosInstance.put(`/projects/${id}`, data),
+  delete: (id) => axiosInstance.delete(`/projects/${id}`)
 };
 
 // API для дефектов
 export const defectsApi = {
-  getAll: (params) => api.get('/defects', { params }),
-  getById: (id) => api.get(`/defects/${id}`),
-  create: (defectData) => api.post('/defects', defectData),
-  update: (id, defectData) => api.put(`/defects/${id}`, defectData),
-  delete: (id) => api.delete(`/defects/${id}`),
-  
-  // API для комментариев к дефектам
-  getComments: (defectId) => api.get(`/defects/${defectId}/comments`),
-  addComment: (defectId, content) => api.post(`/defects/${defectId}/comments`, { content }),
-  updateComment: (defectId, commentId, content) => api.put(`/defects/${defectId}/comments/${commentId}`, { content }),
-  deleteComment: (defectId, commentId) => api.delete(`/defects/${defectId}/comments/${commentId}`),
+  getAll: (filters = {}) => axiosInstance.get('/defects', { params: filters }),
+  getById: (id) => axiosInstance.get(`/defects/${id}`),
+  create: (data) => axiosInstance.post('/defects', data),
+  update: (id, data) => axiosInstance.put(`/defects/${id}`, data),
+  delete: (id) => axiosInstance.delete(`/defects/${id}`),
+  addComment: (defectId, comment) => axiosInstance.post(`/defects/${defectId}/comments`, comment),
+  uploadAttachments: (defectId, files) => {
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+    return axiosInstance.post(`/defects/${defectId}/attachments`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  }
 };
 
 // API для вложений
 export const attachmentsApi = {
-  getByDefect: (defectId) => api.get(`/defects/${defectId}/attachments`),
-  getById: (id) => api.get(`/attachments/${id}`),
-  upload: (defectId, file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    return api.post(`/defects/${defectId}/attachments`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-  },
-  delete: (id) => api.delete(`/attachments/${id}`),
+  download: (id) => axiosInstance.get(`/attachments/${id}`, { responseType: 'blob' }),
+  delete: (id) => axiosInstance.delete(`/attachments/${id}`)
+};
+
+// API для пользователей
+export const usersApi = {
+  getAll: () => axiosInstance.get('/users'),
+  getById: (id) => axiosInstance.get(`/users/${id}`),
+  update: (id, data) => axiosInstance.put(`/users/${id}`, data),
+  delete: (id) => axiosInstance.delete(`/users/${id}`)
 };
 
 // API для отчетов
 export const reportsApi = {
-  getDefectsByStatus: (params) => api.get('/reports/defects/status', { params }),
-  getDefectsByPriority: (params) => api.get('/reports/defects/priority', { params }),
-  getProjectsSummary: () => api.get('/reports/projects/summary'),
-  getUsersPerformance: () => api.get('/reports/users/performance'),
-  exportDefects: (params) => api.get('/reports/export/defects', { params, responseType: 'blob' }),
-  exportProject: (projectId, params) => api.get(`/reports/export/project/${projectId}`, { params, responseType: 'blob' }),
+  getProjectsStats: () => axiosInstance.get('/reports/projects'),
+  getDefectsStats: () => axiosInstance.get('/reports/defects'),
+  getUsersStats: () => axiosInstance.get('/reports/users')
 };
 
-export default api;
+export default axiosInstance;

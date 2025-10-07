@@ -2,68 +2,47 @@ import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { checkAuth } from './lib/slices/authSlice';
+
+// Импорт компонентов макета
 import MainLayout from './components/layouts/MainLayout';
+
+// Импорт компонентов страниц
+import Dashboard from './pages/Dashboard';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
-import Dashboard from './pages/Dashboard';
 import ProjectList from './pages/projects/ProjectList';
 import ProjectDetails from './pages/projects/ProjectDetails';
 import ProjectForm from './pages/projects/ProjectForm';
-// import DefectList from './pages/defects/DefectList';
-// import DefectDetails from './pages/defects/DefectDetails';
-// import UserList from './pages/users/UserList';
-// import UserProfile from './pages/users/UserProfile';
-// import Reports from './pages/reports/Reports';
+import DefectList from './pages/defects/DefectList';
+import DefectDetails from './pages/defects/DefectDetails';
+import DefectForm from './pages/defects/DefectForm';
 import NotFound from './pages/NotFound';
-import LoadingScreen from './components/common/LoadingScreen';
-import CircularProgress from '@mui/material/CircularProgress';
-import Box from '@mui/material/Box';
 
-// Защищенный маршрут - проверяет аутентификацию
-const ProtectedRoute = ({ children, allowedRoles = [] }) => {
-  const { isAuthenticated, user, loading } = useSelector((state) => state.auth);
+// Защищенный маршрут
+const ProtectedRoute = ({ children, roles = [] }) => {
+  const { user, isAuthenticated, loading } = useSelector(state => state.auth);
   
   if (loading) {
-    return (
-      <Box 
-        sx={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center',
-          height: '100vh' 
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <div>Загрузка...</div>;
   }
   
-  // Если не авторизован, перенаправляем на страницу входа
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" />;
   }
   
-  // Если указаны роли и у пользователя нет доступа, показываем сообщение
-  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
+  if (roles.length > 0 && !roles.includes(user.role)) {
+    return <Navigate to="/" />;
   }
   
-  // Если все проверки пройдены, показываем содержимое
   return children;
 };
 
 function App() {
   const dispatch = useDispatch();
-  const { loading } = useSelector((state) => state.auth);
   
-  // Проверка токена при загрузке приложения
   useEffect(() => {
     dispatch(checkAuth());
   }, [dispatch]);
-  
-  if (loading) {
-    return <LoadingScreen />;
-  }
   
   return (
     <Routes>
@@ -79,31 +58,33 @@ function App() {
       }>
         <Route index element={<Dashboard />} />
         
+        {/* Маршруты проектов */}
         <Route path="projects">
           <Route index element={<ProjectList />} />
-          <Route path="new" element={<ProjectForm />} />
           <Route path=":id" element={<ProjectDetails />} />
-          <Route path=":id/edit" element={<ProjectForm />} />
-        </Route>
-        
-        <Route path="defects">
-          <Route index element={<div>Список дефектов</div>} />
-          <Route path=":id" element={<div>Детали дефекта</div>} />
-        </Route>
-        
-        <Route path="users">
-          <Route index element={
-            <ProtectedRoute allowedRoles={['admin', 'manager']}>
-              <div>Список пользователей</div>
+          <Route path="new" element={
+            <ProtectedRoute roles={['admin', 'manager']}>
+              <ProjectForm />
             </ProtectedRoute>
           } />
-          <Route path=":id" element={<div>Профиль пользователя</div>} />
+          <Route path=":id/edit" element={
+            <ProtectedRoute roles={['admin', 'manager']}>
+              <ProjectForm />
+            </ProtectedRoute>
+          } />
         </Route>
         
-        <Route path="reports" element={<div>Отчеты</div>} />
-        
-        <Route path="*" element={<NotFound />} />
+        {/* Маршруты дефектов */}
+        <Route path="defects">
+          <Route index element={<DefectList />} />
+          <Route path=":id" element={<DefectDetails />} />
+          <Route path="new" element={<DefectForm />} />
+          <Route path=":id/edit" element={<DefectForm />} />
+        </Route>
       </Route>
+      
+      {/* Маршрут 404 */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

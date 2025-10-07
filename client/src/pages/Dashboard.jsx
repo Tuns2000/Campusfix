@@ -1,644 +1,540 @@
 import React, { useEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
   Box,
   Typography,
   Grid,
   Card,
   CardContent,
-  Button,
-  Avatar,
   Divider,
-  CircularProgress,
+  Button,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  Avatar,
   Chip,
+  LinearProgress,
   useTheme,
   alpha
 } from '@mui/material';
 import {
-  Business as ProjectIcon,
-  BugReport as DefectIcon,
-  Assignment as TaskIcon,
-  BarChart as ChartIcon,
-  ArrowUpward as TrendUpIcon,
-  ArrowDownward as TrendDownIcon,
-  AccessTime as TimeIcon,
-  Person as PersonIcon
+  Assessment as AssessmentIcon,
+  BugReport as BugReportIcon,
+  Business as BusinessIcon,
+  Build as BuildIcon,
+  CheckCircle as CheckCircleIcon,
+  ErrorOutline as ErrorOutlineIcon,
+  Flag as FlagIcon,
+  PendingActions as PendingActionsIcon,
+  Person as PersonIcon,
+  PlayArrow as PlayArrowIcon
 } from '@mui/icons-material';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { motion } from 'framer-motion';
+import { fetchProjects } from '../lib/slices/projectsSlice';
+import { fetchDefects } from '../lib/slices/defectsSlice';
+import LoadingScreen from '../components/common/LoadingScreen';
 
-// Имитация данных
-const activityData = [
-  { name: 'Создан дефект #124', time: '15 мин назад', user: 'Инженер А.', avatar: null },
-  { name: 'Закрыт дефект #110', time: '2 часа назад', user: 'Инженер Б.', avatar: null },
-  { name: 'Создан проект "Ремонт общежития №3"', time: '5 часов назад', user: 'Менеджер В.', avatar: null },
-];
+const DashboardCard = ({ title, value, icon, color, bgColor, onClick }) => {
+  const theme = useTheme();
+  
+  return (
+    <Card 
+      sx={{ 
+        height: '100%',
+        borderRadius: 3,
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        '&:hover': onClick ? {
+          transform: 'translateY(-4px)',
+          boxShadow: theme.shadows[6]
+        } : {}
+      }}
+      onClick={onClick}
+    >
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Avatar 
+            sx={{ 
+              bgcolor: bgColor || alpha(theme.palette[color || 'primary'].main, 0.1),
+              color: color ? theme.palette[color].main : theme.palette.primary.main,
+              width: 48, 
+              height: 48,
+              mr: 2
+            }}
+          >
+            {icon}
+          </Avatar>
+          <Typography variant="h6" fontWeight="medium">
+            {title}
+          </Typography>
+        </Box>
+        <Typography variant="h3" fontWeight="bold">
+          {value}
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+};
 
 const Dashboard = () => {
   const theme = useTheme();
+  const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
-  const navigate = useNavigate();
+  const { projects, loading: projectsLoading } = useSelector((state) => state.projects);
+  const { defects, loading: defectsLoading } = useSelector((state) => state.defects);
   const [stats, setStats] = useState({
-    projects: 5,
-    openDefects: 15,
-    closedDefects: 23,
-    myAssignedDefects: 4
+    totalProjects: 0,
+    activeProjects: 0,
+    completedProjects: 0,
+    totalDefects: 0,
+    openDefects: 0,
+    resolvedDefects: 0,
+    highPriorityDefects: 0
   });
-  const [loading, setLoading] = useState(true);
-
-  // Данные для графиков
-  const defectData = [
-    { name: 'Открытые', value: stats.openDefects, color: theme.palette.error.main },
-    { name: 'Закрытые', value: stats.closedDefects, color: theme.palette.success.main },
-  ];
-
-  // Градиенты для карточек
-  const gradients = {
-    project: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.9)} 0%, ${alpha(theme.palette.primary.dark, 0.8)} 100%)`,
-    defect: `linear-gradient(135deg, ${alpha(theme.palette.error.main, 0.9)} 0%, ${alpha(theme.palette.error.dark, 0.8)} 100%)`,
-    closed: `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.9)} 0%, ${alpha(theme.palette.success.dark, 0.8)} 100%)`,
-    assigned: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.9)} 0%, ${alpha(theme.palette.warning.dark, 0.8)} 100%)`
-  };
-
+  
+  // Загрузка данных
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
+    dispatch(fetchProjects());
+    dispatch(fetchDefects());
+  }, [dispatch]);
+  
+  // Расчет статистики
+  useEffect(() => {
+    if (projects.length > 0 || defects.length > 0) {
+      setStats({
+        totalProjects: projects.length,
+        activeProjects: projects.filter(p => p.status === 'active' || p.status === 'in_progress').length,
+        completedProjects: projects.filter(p => p.status === 'completed').length,
+        totalDefects: defects.length,
+        openDefects: defects.filter(d => d.status === 'new' || d.status === 'in_progress' || d.status === 'reopened').length,
+        resolvedDefects: defects.filter(d => d.status === 'resolved' || d.status === 'closed').length,
+        highPriorityDefects: defects.filter(d => d.priority === 'high').length
+      });
+    }
+  }, [projects, defects]);
+  
+  // Получение приоритетных дефектов для текущего пользователя
+  const getMyAssignedDefects = () => {
+    if (!user || !user.id) return [];
+    
+    return defects
+      .filter(d => d.assigned_to === user.id && (d.status === 'new' || d.status === 'in_progress' || d.status === 'reopened'))
+      .sort((a, b) => {
+        // Сначала по приоритету
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+        if (priorityDiff !== 0) return priorityDiff;
         
-        // В реальном приложении здесь будут запросы к API
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        setStats({
-          projects: 5,
-          openDefects: 15,
-          closedDefects: 23,
-          myAssignedDefects: 4
-        });
-        
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDashboardData();
-  }, [user.id]);
-
-  const navigateTo = (path) => {
-    navigate(path);
+        // Затем по дате обновления
+        return new Date(b.updated_at) - new Date(a.updated_at);
+      })
+      .slice(0, 5); // Только 5 дефектов
   };
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
-        <CircularProgress />
-      </Box>
-    );
+  
+  // Получение активных проектов
+  const getActiveProjects = () => {
+    return projects
+      .filter(p => p.status === 'active' || p.status === 'in_progress')
+      .sort((a, b) => new Date(a.end_date) - new Date(b.end_date))
+      .slice(0, 5); // Только 5 проектов
+  };
+  
+  // Расчет процента выполнения проекта (упрощенно)
+  const calculateProgress = (project) => {
+    if (project.status === 'completed') return 100;
+    if (project.status === 'planned') return 0;
+    
+    // Простой расчет на основе времени
+    const startDate = new Date(project.start_date);
+    const endDate = new Date(project.end_date);
+    const today = new Date();
+    
+    if (today < startDate) return 0;
+    if (today > endDate) return 100;
+    
+    const totalDuration = endDate - startDate;
+    const elapsedDuration = today - startDate;
+    return Math.round((elapsedDuration / totalDuration) * 100);
+  };
+  
+  // Получение статуса дефекта на русском и цвета
+  const getDefectStatusInfo = (status) => {
+    switch (status) {
+      case 'new':
+        return { label: 'Новый', color: 'info' };
+      case 'in_progress':
+        return { label: 'В работе', color: 'warning' };
+      case 'resolved':
+        return { label: 'Решен', color: 'success' };
+      case 'closed':
+        return { label: 'Закрыт', color: 'success' };
+      case 'reopened':
+        return { label: 'Переоткрыт', color: 'error' };
+      default:
+        return { label: status, color: 'default' };
+    }
+  };
+  
+  // Получение приоритета дефекта на русском и цвета
+  const getDefectPriorityInfo = (priority) => {
+    switch (priority) {
+      case 'high':
+        return { label: 'Высокий', color: 'error' };
+      case 'medium':
+        return { label: 'Средний', color: 'warning' };
+      case 'low':
+        return { label: 'Низкий', color: 'success' };
+      default:
+        return { label: priority, color: 'default' };
+    }
+  };
+  
+  // Получение иконки по статусу проекта
+  const getProjectStatusIcon = (status) => {
+    switch (status) {
+      case 'active':
+      case 'in_progress':
+        return <PlayArrowIcon />;
+      case 'completed':
+        return <CheckCircleIcon />;
+      case 'planned':
+        return <PendingActionsIcon />;
+      default:
+        return <FlagIcon />;
+    }
+  };
+  
+  // Загрузка данных
+  if ((projectsLoading && projects.length === 0) || (defectsLoading && defects.length === 0)) {
+    return <LoadingScreen />;
   }
-
+  
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 } }}>
-      {/* Приветствие и дата */}
+    <Box sx={{ p: 3 }}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.3 }}
       >
-        <Box sx={{ 
-          mb: 4,
-          background: `linear-gradient(90deg, ${alpha(theme.palette.primary.main, 0.15)} 0%, rgba(255,255,255,0) 100%)`,
-          p: 3,
-          borderRadius: 2,
-          borderLeft: `4px solid ${theme.palette.primary.main}`
-        }}>
-          <Grid container alignItems="center" spacing={2}>
-            <Grid item>
-              <Avatar 
-                sx={{ 
-                  width: 60, 
-                  height: 60,
-                  bgcolor: theme.palette.primary.main,
-                  boxShadow: `0 0 0 4px ${alpha(theme.palette.primary.main, 0.2)}`
-                }}
-              >
-                {user.firstName?.charAt(0)}{user.lastName?.charAt(0)}
-              </Avatar>
-            </Grid>
-            <Grid item xs>
-              <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
-                Добро пожаловать, {user.firstName} {user.lastName}!
-              </Typography>
-              <Typography variant="body1" color="text.secondary">
-                {new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-              </Typography>
-            </Grid>
+        {/* Заголовок дашборда */}
+        <Typography variant="h4" component="h1" fontWeight="bold" gutterBottom>
+          Панель управления
+        </Typography>
+        <Typography variant="subtitle1" color="text.secondary" paragraph>
+          Добро пожаловать, {user?.name || 'Пользователь'}! Здесь вы можете увидеть общую статистику по проектам и дефектам.
+        </Typography>
+        
+        {/* Статистические карточки */}
+        <Grid container spacing={3} sx={{ mt: 2 }}>
+          {/* Проекты */}
+          <Grid item xs={12} sm={6} md={3}>
+            <DashboardCard 
+              title="Всего проектов"
+              value={stats.totalProjects}
+              icon={<BusinessIcon />}
+              color="primary"
+              onClick={() => window.location.href = '/projects'}
+            />
           </Grid>
-        </Box>
-      </motion.div>
-
-      {/* Статистические карточки в новом дизайне */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* Проекты */}
-        <Grid item xs={12} sm={6} md={3}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3, delay: 0.1 }}
-            whileHover={{ y: -5, transition: { duration: 0.2 } }}
-          >
-            <Card 
-              sx={{ 
-                borderRadius: 3,
-                overflow: 'hidden',
-                position: 'relative',
-                height: 180,
-                cursor: 'pointer',
-              }}
-              onClick={() => navigateTo('/projects')}
-            >
-              <Box sx={{ 
-                height: '100%',
-                background: gradients.project,
-                color: 'white',
-                p: 3,
-              }}>
-                <Box sx={{ 
-                  position: 'absolute', 
-                  top: 20, 
-                  right: 20,
-                  width: 50,
-                  height: 50,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(255,255,255,0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <ProjectIcon fontSize="large" />
-                </Box>
-                
-                <Box sx={{ position: 'relative', zIndex: 1 }}>
-                  <Typography variant="overline" fontWeight="bold" fontSize="0.75rem" sx={{ opacity: 0.8 }}>
-                    АКТИВНЫЕ ПРОЕКТЫ
-                  </Typography>
-                  <Typography variant="h2" fontWeight="bold" sx={{ my: 1 }}>
-                    {stats.projects}
-                  </Typography>
-                  <Chip 
-                    label="Просмотреть все" 
-                    size="small" 
-                    sx={{ 
-                      bgcolor: 'rgba(255,255,255,0.2)', 
-                      color: 'white',
-                      '&:hover': {
-                        bgcolor: 'rgba(255,255,255,0.3)'
-                      } 
-                    }} 
-                  />
-                </Box>
-
-                <Box sx={{ 
-                  position: 'absolute',
-                  right: -20,
-                  bottom: -20,
-                  width: 120,
-                  height: 120,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(255,255,255,0.05)',
-                  zIndex: 0
-                }} />
-              </Box>
-            </Card>
-          </motion.div>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <DashboardCard 
+              title="Активные проекты"
+              value={stats.activeProjects}
+              icon={<PlayArrowIcon />}
+              color="info"
+              onClick={() => window.location.href = '/projects?status=active'}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={3}>
+            <DashboardCard 
+              title="Завершённые проекты"
+              value={stats.completedProjects}
+              icon={<CheckCircleIcon />}
+              color="success"
+              onClick={() => window.location.href = '/projects?status=completed'}
+            />
+          </Grid>
+          
+          {/* Дефекты */}
+          <Grid item xs={12} sm={6} md={3}>
+            <DashboardCard 
+              title="Всего дефектов"
+              value={stats.totalDefects}
+              icon={<BugReportIcon />}
+              color="error"
+              onClick={() => window.location.href = '/defects'}
+            />
+          </Grid>
         </Grid>
         
-        {/* Открытые дефекты */}
-        <Grid item xs={12} sm={6} md={3}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3, delay: 0.2 }}
-            whileHover={{ y: -5, transition: { duration: 0.2 } }}
-          >
-            <Card 
-              sx={{ 
-                borderRadius: 3,
-                overflow: 'hidden',
-                position: 'relative',
-                height: 180,
-                cursor: 'pointer',
-              }}
-              onClick={() => navigateTo('/defects?status=open')}
-            >
-              <Box sx={{ 
-                height: '100%',
-                background: gradients.defect,
-                color: 'white',
-                p: 3
-              }}>
-                <Box sx={{ 
-                  position: 'absolute', 
-                  top: 20, 
-                  right: 20,
-                  width: 50,
-                  height: 50,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(255,255,255,0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <DefectIcon fontSize="large" />
-                </Box>
-                
-                <Box sx={{ position: 'relative', zIndex: 1 }}>
-                  <Typography variant="overline" fontWeight="bold" fontSize="0.75rem" sx={{ opacity: 0.8 }}>
-                    ОТКРЫТЫЕ ДЕФЕКТЫ
-                  </Typography>
-                  <Typography variant="h2" fontWeight="bold" sx={{ my: 1 }}>
-                    {stats.openDefects}
-                  </Typography>
-                  <Chip 
-                    icon={<TrendUpIcon fontSize="small" />}
-                    label="+2 за неделю" 
-                    size="small" 
-                    sx={{ 
-                      bgcolor: 'rgba(255,255,255,0.2)', 
-                      color: 'white',
-                      '&:hover': {
-                        bgcolor: 'rgba(255,255,255,0.3)'
-                      } 
-                    }} 
-                  />
-                </Box>
-
-                <Box sx={{ 
-                  position: 'absolute',
-                  right: -20,
-                  bottom: -20,
-                  width: 120,
-                  height: 120,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(255,255,255,0.05)',
-                  zIndex: 0
-                }} />
-              </Box>
-            </Card>
-          </motion.div>
+        {/* Вторая строка карточек статистики */}
+        <Grid container spacing={3} sx={{ mt: 1 }}>
+          <Grid item xs={12} sm={6} md={4}>
+            <DashboardCard 
+              title="Открытые дефекты"
+              value={stats.openDefects}
+              icon={<ErrorOutlineIcon />}
+              color="warning"
+              onClick={() => window.location.href = '/defects?status=new'}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={4}>
+            <DashboardCard 
+              title="Решённые дефекты"
+              value={stats.resolvedDefects}
+              icon={<CheckCircleIcon />}
+              color="success"
+              onClick={() => window.location.href = '/defects?status=resolved'}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={4}>
+            <DashboardCard 
+              title="Высокий приоритет"
+              value={stats.highPriorityDefects}
+              icon={<FlagIcon />}
+              color="error"
+              onClick={() => window.location.href = '/defects?priority=high'}
+            />
+          </Grid>
         </Grid>
         
-        {/* Закрытые дефекты */}
-        <Grid item xs={12} sm={6} md={3}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3, delay: 0.3 }}
-            whileHover={{ y: -5, transition: { duration: 0.2 } }}
-          >
-            <Card 
-              sx={{ 
-                borderRadius: 3,
-                overflow: 'hidden',
-                position: 'relative',
-                height: 180,
-                cursor: 'pointer',
-              }}
-              onClick={() => navigateTo('/defects?status=closed')}
-            >
+        {/* Разделы с проектами и дефектами */}
+        <Grid container spacing={4} sx={{ mt: 4 }}>
+          {/* Активные проекты */}
+          <Grid item xs={12} md={6}>
+            <Card sx={{ borderRadius: 3 }}>
               <Box sx={{ 
-                height: '100%',
-                background: gradients.closed,
-                color: 'white',
-                p: 3
+                p: 3, 
+                pb: 2,
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between'
               }}>
-                <Box sx={{ 
-                  position: 'absolute', 
-                  top: 20, 
-                  right: 20,
-                  width: 50,
-                  height: 50,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(255,255,255,0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <TaskIcon fontSize="large" />
-                </Box>
-                
-                <Box sx={{ position: 'relative', zIndex: 1 }}>
-                  <Typography variant="overline" fontWeight="bold" fontSize="0.75rem" sx={{ opacity: 0.8 }}>
-                    ЗАКРЫТЫЕ ДЕФЕКТЫ
-                  </Typography>
-                  <Typography variant="h2" fontWeight="bold" sx={{ my: 1 }}>
-                    {stats.closedDefects}
-                  </Typography>
-                  <Chip 
-                    icon={<TrendUpIcon fontSize="small" />}
-                    label="+5 за неделю" 
-                    size="small" 
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Avatar 
                     sx={{ 
-                      bgcolor: 'rgba(255,255,255,0.2)', 
-                      color: 'white',
-                      '&:hover': {
-                        bgcolor: 'rgba(255,255,255,0.3)'
-                      } 
-                    }} 
-                  />
-                </Box>
-
-                <Box sx={{ 
-                  position: 'absolute',
-                  right: -20,
-                  bottom: -20,
-                  width: 120,
-                  height: 120,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(255,255,255,0.05)',
-                  zIndex: 0
-                }} />
-              </Box>
-            </Card>
-          </motion.div>
-        </Grid>
-        
-        {/* Назначенные мне */}
-        <Grid item xs={12} sm={6} md={3}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3, delay: 0.4 }}
-            whileHover={{ y: -5, transition: { duration: 0.2 } }}
-          >
-            <Card 
-              sx={{ 
-                borderRadius: 3,
-                overflow: 'hidden',
-                position: 'relative',
-                height: 180,
-                cursor: 'pointer',
-              }}
-              onClick={() => navigateTo(`/defects?assignedTo=${user.id}`)}
-            >
-              <Box sx={{ 
-                height: '100%',
-                background: gradients.assigned,
-                color: 'white',
-                p: 3
-              }}>
-                <Box sx={{ 
-                  position: 'absolute', 
-                  top: 20, 
-                  right: 20,
-                  width: 50,
-                  height: 50,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(255,255,255,0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <PersonIcon fontSize="large" />
-                </Box>
-                
-                <Box sx={{ position: 'relative', zIndex: 1 }}>
-                  <Typography variant="overline" fontWeight="bold" fontSize="0.75rem" sx={{ opacity: 0.8 }}>
-                    НАЗНАЧЕНО МНЕ
+                      bgcolor: alpha(theme.palette.primary.main, 0.1),
+                      color: theme.palette.primary.main,
+                      width: 40, 
+                      height: 40,
+                      mr: 2
+                    }}
+                  >
+                    <BusinessIcon />
+                  </Avatar>
+                  <Typography variant="h6" fontWeight="bold">
+                    Активные проекты
                   </Typography>
-                  <Typography variant="h2" fontWeight="bold" sx={{ my: 1 }}>
-                    {stats.myAssignedDefects}
-                  </Typography>
-                  <Chip 
-                    label="Срочных: 1" 
-                    size="small" 
-                    sx={{ 
-                      bgcolor: 'rgba(255,255,255,0.2)', 
-                      color: 'white',
-                      '&:hover': {
-                        bgcolor: 'rgba(255,255,255,0.3)'
-                      } 
-                    }} 
-                  />
                 </Box>
-
-                <Box sx={{ 
-                  position: 'absolute',
-                  right: -20,
-                  bottom: -20,
-                  width: 120,
-                  height: 120,
-                  borderRadius: '50%',
-                  bgcolor: 'rgba(255,255,255,0.05)',
-                  zIndex: 0
-                }} />
+                <Button 
+                  variant="outlined" 
+                  size="small"
+                  component={Link}
+                  to="/projects"
+                >
+                  Все проекты
+                </Button>
               </Box>
-            </Card>
-          </motion.div>
-        </Grid>
-      </Grid>
-
-      <Grid container spacing={3}>
-        {/* Соотношение дефектов - круговая диаграмма */}
-        <Grid item xs={12} md={6}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
-          >
-            <Card sx={{ p: 3, borderRadius: 3, height: 380 }}>
-              <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Состояние дефектов
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
-              
-              <Grid container spacing={2}>
-                <Grid item xs={7}>
-                  <Box sx={{ height: 250, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={defectData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={100}
-                          fill="#8884d8"
-                          dataKey="value"
-                          animationBegin={0}
-                          animationDuration={1500}
-                        >
-                          {defectData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </Box>
-                </Grid>
-                <Grid item xs={5}>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center', gap: 2 }}>
-                    {defectData.map((entry, index) => (
-                      <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Box sx={{ width: 16, height: 16, borderRadius: 1, bgcolor: entry.color, mr: 1 }} />
-                        <Typography variant="body2">{entry.name}: <b>{entry.value}</b></Typography>
-                      </Box>
-                    ))}
+              <Divider />
+              {getActiveProjects().length > 0 ? (
+                <List sx={{ p: 0 }}>
+                  {getActiveProjects().map((project) => {
+                    const progress = calculateProgress(project);
                     
-                    <Box sx={{ mt: 2 }}>
-                      <Typography variant="subtitle1" fontWeight="bold">
-                        Всего дефектов: {stats.openDefects + stats.closedDefects}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Процент решения: {Math.round((stats.closedDefects / (stats.openDefects + stats.closedDefects)) * 100)}%
-                      </Typography>
-                    </Box>
-                    
-                    <Button 
-                      variant="outlined" 
-                      color="primary"
-                      size="small"
-                      sx={{ mt: 2, alignSelf: 'flex-start' }}
-                      onClick={() => navigateTo('/defects')}
-                    >
-                      Все дефекты
-                    </Button>
-                  </Box>
-                </Grid>
-              </Grid>
-            </Card>
-          </motion.div>
-        </Grid>
-        
-        {/* Последние активности */}
-        <Grid item xs={12} md={6}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.6 }}
-          >
-            <Card sx={{ p: 3, borderRadius: 3, height: 380 }}>
-              <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Последние активности
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              
-              {activityData.length > 0 ? (
-                <Box sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  gap: 2,
-                  maxHeight: 280,
-                  overflow: 'auto',
-                  pr: 1
-                }}>
-                  {activityData.map((activity, index) => (
-                    <Box 
-                      key={index}
-                      sx={{
-                        p: 2,
-                        borderRadius: 2,
-                        bgcolor: alpha(theme.palette.primary.main, 0.05),
-                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                        '&:hover': {
-                          bgcolor: alpha(theme.palette.primary.main, 0.08),
-                        }
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Avatar 
-                          sx={{ 
-                            width: 36, 
-                            height: 36, 
-                            mr: 2,
-                            bgcolor: theme.palette.secondary.main 
-                          }}
-                        >
-                          {activity.user.split(' ')[0][0]}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="subtitle2" fontWeight="bold">
-                            {activity.name}
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                            <TimeIcon sx={{ fontSize: 14, mr: 0.5, color: 'text.secondary' }} />
-                            <Typography variant="caption" color="text.secondary">
-                              {activity.time} · {activity.user}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
+                    return (
+                      <ListItem 
+                        key={project.id}
+                        sx={{ 
+                          px: 3, 
+                          py: 2,
+                          borderBottom: `1px solid ${theme.palette.divider}`,
+                          '&:last-child': {
+                            borderBottom: 'none'
+                          }
+                        }}
+                        button
+                        component={Link}
+                        to={`/projects/${project.id}`}
+                      >
+                        <ListItemAvatar>
+                          <Avatar sx={{ 
+                            bgcolor: alpha(theme.palette.primary.main, 0.1),
+                            color: theme.palette.primary.main
+                          }}>
+                            {getProjectStatusIcon(project.status)}
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={project.name}
+                          secondary={
+                            <Box sx={{ mt: 1 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Прогресс
+                                </Typography>
+                                <Typography variant="body2" fontWeight="medium">
+                                  {progress}%
+                                </Typography>
+                              </Box>
+                              <LinearProgress 
+                                variant="determinate" 
+                                value={progress} 
+                                sx={{ 
+                                  height: 6, 
+                                  borderRadius: 3,
+                                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                  '& .MuiLinearProgress-bar': {
+                                    borderRadius: 3
+                                  }
+                                }}
+                              />
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                Срок: {new Date(project.end_date).toLocaleDateString('ru-RU')}
+                              </Typography>
+                            </Box>
+                          }
+                        />
+                      </ListItem>
+                    );
+                  })}
+                </List>
               ) : (
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200 }}>
-                  <Typography variant="body2" color="text.secondary" align="center">
-                    Пока нет активностей для отображения.
-                    <br />
-                    Действия пользователей будут появляться здесь.
+                <Box sx={{ p: 4, textAlign: 'center' }}>
+                  <Typography color="text.secondary">
+                    Нет активных проектов
                   </Typography>
+                  {user && ['admin', 'manager'].includes(user.role) && (
+                    <Button
+                      variant="contained"
+                      component={Link}
+                      to="/projects/new"
+                      sx={{ mt: 2 }}
+                    >
+                      Создать проект
+                    </Button>
+                  )}
                 </Box>
               )}
             </Card>
-          </motion.div>
-        </Grid>
-        
-        {/* Быстрые действия */}
-        <Grid item xs={12}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.7 }}
-          >
-            <Card 
-              sx={{ 
+          </Grid>
+          
+          {/* Назначенные дефекты */}
+          <Grid item xs={12} md={6}>
+            <Card sx={{ borderRadius: 3 }}>
+              <Box sx={{ 
                 p: 3, 
-                borderRadius: 3,
-                background: `linear-gradient(90deg, ${alpha(theme.palette.background.paper, 0.9)} 0%, ${alpha(theme.palette.background.default, 0.95)} 100%)`,
-                backdropFilter: 'blur(10px)',
-                border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-              }}
-            >
-              <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Быстрые действия
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              
-              <Grid container spacing={2}>
-                <Grid item>
+                pb: 2,
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between'
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Avatar 
+                    sx={{ 
+                      bgcolor: alpha(theme.palette.error.main, 0.1),
+                      color: theme.palette.error.main,
+                      width: 40, 
+                      height: 40,
+                      mr: 2
+                    }}
+                  >
+                    <BugReportIcon />
+                  </Avatar>
+                  <Typography variant="h6" fontWeight="bold">
+                    Мои дефекты
+                  </Typography>
+                </Box>
+                <Button 
+                  variant="outlined" 
+                  size="small"
+                  component={Link}
+                  to={`/defects?assigned_to=${user?.id || ''}`}
+                >
+                  Все мои дефекты
+                </Button>
+              </Box>
+              <Divider />
+              {getMyAssignedDefects().length > 0 ? (
+                <List sx={{ p: 0 }}>
+                  {getMyAssignedDefects().map((defect) => {
+                    const statusInfo = getDefectStatusInfo(defect.status);
+                    const priorityInfo = getDefectPriorityInfo(defect.priority);
+                    
+                    return (
+                      <ListItem 
+                        key={defect.id}
+                        sx={{ 
+                          px: 3, 
+                          py: 2,
+                          borderBottom: `1px solid ${theme.palette.divider}`,
+                          '&:last-child': {
+                            borderBottom: 'none'
+                          }
+                        }}
+                        button
+                        component={Link}
+                        to={`/defects/${defect.id}`}
+                      >
+                        <ListItemAvatar>
+                          <Avatar sx={{ 
+                            bgcolor: alpha(theme.palette[priorityInfo.color].main, 0.1),
+                            color: theme.palette[priorityInfo.color].main
+                          }}>
+                            <BugReportIcon />
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={defect.title}
+                          secondary={
+                            <Box sx={{ mt: 0.5 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                {defect.project_name || 'Без проекта'}
+                              </Typography>
+                              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                <Chip 
+                                  label={statusInfo.label} 
+                                  color={statusInfo.color} 
+                                  size="small" 
+                                />
+                                <Chip 
+                                  label={priorityInfo.label} 
+                                  color={priorityInfo.color} 
+                                  size="small" 
+                                  variant="outlined"
+                                />
+                              </Box>
+                            </Box>
+                          }
+                        />
+                      </ListItem>
+                    );
+                  })}
+                </List>
+              ) : (
+                <Box sx={{ p: 4, textAlign: 'center' }}>
+                  <Typography color="text.secondary">
+                    Нет назначенных вам дефектов
+                  </Typography>
                   <Button
                     variant="contained"
-                    color="primary"
-                    startIcon={<DefectIcon />}
-                    sx={{ 
-                      px: 3,
-                      borderRadius: 2,
-                      backgroundImage: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                      boxShadow: `0 4px 14px ${alpha(theme.palette.primary.main, 0.4)}`
-                    }}
-                    onClick={() => navigateTo('/defects/new')}
+                    component={Link}
+                    to="/defects/new"
+                    sx={{ mt: 2 }}
                   >
                     Создать дефект
                   </Button>
-                </Grid>
-                <Grid item>
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    startIcon={<ChartIcon />}
-                    sx={{ px: 3, borderRadius: 2 }}
-                    onClick={() => navigateTo('/reports')}
-                  >
-                    Отчеты
-                  </Button>
-                </Grid>
-              </Grid>
+                </Box>
+              )}
             </Card>
-          </motion.div>
+          </Grid>
         </Grid>
-      </Grid>
+      </motion.div>
     </Box>
   );
 };

@@ -122,8 +122,14 @@ const MainLayout = () => {
     { text: 'Отчеты', icon: <AssessmentIcon />, path: '/reports', roles: ['admin', 'manager', 'engineer'] },
   ];
 
+  // Фильтрация пунктов меню в зависимости от роли пользователя
+  const filteredMenuItems = menuItems.filter(item => 
+    user && item.roles.includes(user.role)
+  );
+
   return (
     <Box sx={{ display: 'flex' }}>
+      {/* App Bar */}
       <AppBarStyled position="fixed" open={open}>
         <Toolbar>
           <IconButton
@@ -136,13 +142,15 @@ const MainLayout = () => {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            СистемаКонтроля
+            CampusFix
           </Typography>
+          
+          {/* User Profile Menu */}
           <Box sx={{ flexGrow: 0 }}>
-            <Tooltip title="Открыть настройки">
+            <Tooltip title="Профиль">
               <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
-                <Avatar alt={user ? `${user.firstName} ${user.lastName}` : 'Пользователь'}>
-                  {user ? user.firstName.charAt(0) + user.lastName.charAt(0) : 'U'}
+                <Avatar alt={user?.name} src={user?.avatar}>
+                  {user?.name ? user.name[0].toUpperCase() : 'U'}
                 </Avatar>
               </IconButton>
             </Tooltip>
@@ -162,13 +170,19 @@ const MainLayout = () => {
               open={Boolean(anchorElUser)}
               onClose={handleCloseUserMenu}
             >
-              <MenuItem onClick={() => { handleCloseUserMenu(); navigate(`/users/${user.id}`); }}>
+              <MenuItem onClick={() => {
+                handleCloseUserMenu();
+                navigate('/profile');
+              }}>
                 <ListItemIcon>
                   <PersonIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText>Профиль</ListItemText>
               </MenuItem>
-              <MenuItem onClick={() => { handleCloseUserMenu(); navigate('/settings'); }}>
+              <MenuItem onClick={() => {
+                handleCloseUserMenu();
+                navigate('/settings');
+              }}>
                 <ListItemIcon>
                   <SettingsIcon fontSize="small" />
                 </ListItemIcon>
@@ -185,6 +199,8 @@ const MainLayout = () => {
           </Box>
         </Toolbar>
       </AppBarStyled>
+      
+      {/* Side Drawer */}
       <Drawer
         sx={{
           width: drawerWidth,
@@ -199,28 +215,32 @@ const MainLayout = () => {
         open={open}
       >
         <DrawerHeader>
+          <Typography variant="h6" sx={{ flexGrow: 1, ml: 2 }}>
+            Меню
+          </Typography>
           <IconButton onClick={handleDrawerClose}>
             <ChevronLeftIcon />
           </IconButton>
         </DrawerHeader>
         <Divider />
         <List>
-          {menuItems.map((item) => (
-            // Показываем пункт меню только если у пользователя есть на него права
-            item.roles.includes(user?.role) && (
-              <ListItem key={item.text} disablePadding>
-                <ListItemButton onClick={() => handleNavigate(item.path)}>
-                  <ListItemIcon>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.text} />
-                </ListItemButton>
-              </ListItem>
-            )
+          {filteredMenuItems.map((item) => (
+            <ListItem key={item.text} disablePadding>
+              <ListItemButton onClick={() => handleNavigate(item.path)}>
+                <ListItemIcon>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText primary={item.text} />
+              </ListItemButton>
+            </ListItem>
           ))}
         </List>
       </Drawer>
+      
+      {/* Main Content */}
       <Main open={open}>
-        <DrawerHeader />
-        <Container maxWidth="xl">
+        <DrawerHeader /> {/* This provides spacing at the top */}
+        <Container maxWidth="xl" sx={{ mt: 2 }}>
           <Outlet />
         </Container>
       </Main>
